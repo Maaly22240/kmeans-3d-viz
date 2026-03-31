@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>K-Means 3D — Akwa Gaz</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/tableau-extensions@1/dist/tableau.extensions.1.latest.js"></script>
+  <script src="kmeans.js"></script>
+  <style>
+    #plot-area { overflow:hidden; position:relative; }
+    #glcanvas  { position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+    #glcanvas:active { cursor:grabbing; }
+
+    .axis-badge {
+      position:absolute; font-family:var(--font-mono); font-size:9px;
+      letter-spacing:.07em; pointer-events:none; padding:2px 7px;
+      border-radius:2px; z-index:8;
+    }
+    #lx { bottom:36px; left:50%; transform:translateX(-50%); background:#00d4ff18; color:#00d4ff; }
+    #ly { top:50%; left:8px; writing-mode:vertical-rl; transform:translateY(-50%) rotate(180deg); background:#ffb83018; color:#ffb830; }
+    #lz { top:10px; right:12px; background:#39d98a18; color:#39d98a; }
+
+    #cam-controls {
+      position:absolute; bottom:36px; right:12px;
+      display:flex; flex-direction:column; gap:4px; z-index:10;
+    }
+    .cam-btn {
+      width:28px; height:28px; background:var(--bg-card);
+      border:1px solid var(--border); border-radius:var(--radius-sm);
+      color:var(--text-secondary); font-size:14px;
+      display:grid; place-items:center; cursor:pointer;
+      transition:all var(--transition); user-select:none;
+    }
+    .cam-btn:hover { border-color:var(--cyan-dim); color:var(--cyan); }
+
+    #tooltip {
+      position:absolute; background:var(--bg-card); border:1px solid var(--border);
+      border-radius:var(--radius-sm); padding:6px 10px;
+      font-family:var(--font-mono); font-size:10px; color:var(--text-primary);
+      pointer-events:none; opacity:0; transition:opacity 120ms ease;
+      z-index:20; white-space:nowrap; line-height:1.8;
+    }
+    #tooltip.visible { opacity:1; }
+
+    #watermark {
+      position:absolute; bottom:8px; left:14px;
+      font-family:var(--font-mono); font-size:9px;
+      letter-spacing:.18em; color:var(--text-muted);
+      pointer-events:none; z-index:5;
+    }
+
+    /* Log de débogage visible */
+    #debug-log {
+      position:absolute; bottom:30px; left:50%;
+      transform:translateX(-50%);
+      font-family:var(--font-mono); font-size:10px;
+      color:var(--amber); background:var(--bg-card);
+      border:1px solid var(--border); border-radius:3px;
+      padding:4px 10px; z-index:30; pointer-events:none;
+      opacity:0; transition:opacity 300ms;
+    }
+    #debug-log.show { opacity:1; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <div class="header-logo">
+      <svg viewBox="0 0 16 16" fill="none">
+        <circle cx="4"  cy="4"  r="2" fill="#00d4ff"/>
+        <circle cx="12" cy="4"  r="2" fill="#ffb830"/>
+        <circle cx="4"  cy="12" r="2" fill="#ff5f5f"/>
+        <circle cx="12" cy="12" r="2" fill="#39d98a"/>
+      </svg>
+    </div>
+    <h1>K-Means <span>3D</span> — Akwa Gaz</h1>
+    <div class="header-badge">
+      <div class="dot-live"></div>
+      <span id="badge-source">Chargement…</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+
+    <div class="section" id="sec-features">
+      <div class="section-header" onclick="toggleSection('sec-features')">
+        <span class="section-title">Axes 3D</span><span class="section-arrow">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="control-group">
+          <label class="control-label">Axe X <span style="color:var(--cyan)">■</span></label>
+          <select id="axeX"></select>
+        </div>
+        <div class="control-group">
+          <label class="control-label">Axe Y <span style="color:var(--amber)">■</span></label>
+          <select id="axeY"></select>
+        </div>
+        <div class="control-group">
+          <label class="control-label">Axe Z <span style="color:var(--green)">■</span></label>
+          <select id="axeZ"></select>
+        </div>
+        <div class="control-group">
+          <label class="control-label">Taille points <span class="value-badge" id="size-val">4</span></label>
+          <input type="range" id="point-size" min="1" max="14" value="4"
+            oninput="document.getElementById('size-val').textContent=this.value; scheduleRender()">
+        </div>
+        <div class="control-group">
+          <label class="control-label">Opacité <span class="value-badge" id="alpha-val">80</span>%</label>
+          <input type="range" id="alpha" min="10" max="100" value="80"
+            oninput="document.getElementById('alpha-val').textContent=this.value; scheduleRender()">
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-kmeans">
+      <div class="section-header" onclick="toggleSection('sec-kmeans')">
+        <span class="section-title">Options K-Means</span><span class="section-arrow">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="control-group">
+          <label class="control-label">Clusters (k fixé)
+            <span class="value-badge" style="color:var(--amber)">4</span>
+          </label>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);padding:4px 0;line-height:1.9">
+            Champions · Actifs Modérés Hiver<br>PDV Dormants · Actifs Faibles Été
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label">Itérations max <span class="value-badge" id="iter-val">300</span></label>
+          <input type="range" id="iter-slider" min="50" max="500" step="50" value="300"
+            oninput="document.getElementById('iter-val').textContent=this.value">
+        </div>
+        <div class="control-group">
+          <label class="control-label">Relances nInit <span class="value-badge" id="ninit-val">3</span></label>
+          <input type="range" id="ninit-slider" min="1" max="10" value="3"
+            oninput="document.getElementById('ninit-val').textContent=this.value">
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Normalisation Z-score</span>
+          <label class="toggle"><input type="checkbox" id="toggle-norm" checked><span class="toggle-track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Centroïdes</span>
+          <label class="toggle"><input type="checkbox" id="toggle-centroids" checked onchange="scheduleRender()"><span class="toggle-track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Segment réel (CSV)</span>
+          <label class="toggle"><input type="checkbox" id="toggle-real-seg" checked onchange="applyLabels(); scheduleRender()"><span class="toggle-track"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-run" onclick="runPipeline()">
+      <div class="spinner"></div>
+      <svg class="btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <polygon points="2,1 11,6 2,11" fill="currentColor"/>
+      </svg>
+      <span>Lancer le clustering</span>
+    </button>
+
+    <div class="section" id="sec-metrics">
+      <div class="section-header" onclick="toggleSection('sec-metrics')">
+        <span class="section-title">Métriques</span><span class="section-arrow">▾</span>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-value" id="m-points">—</div><div class="metric-label">PDV</div></div>
+        <div class="metric-card"><div class="metric-value amber" id="m-k">4</div><div class="metric-label">Clusters</div></div>
+        <div class="metric-card"><div class="metric-value green" id="m-silhouette">—</div><div class="metric-label">Silhouette</div></div>
+        <div class="metric-card"><div class="metric-value" id="m-inertia">—</div><div class="metric-label">Inertie</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-elbow">
+      <div class="section-header" onclick="toggleSection('sec-elbow')">
+        <span class="section-title">Courbe du coude</span><span class="section-arrow">▾</span>
+      </div>
+      <div id="elbow-container">
+        <canvas id="elbow-canvas" width="240" height="80"></canvas>
+      </div>
+    </div>
+
+    <div class="section" id="sec-legend">
+      <div class="section-header" onclick="toggleSection('sec-legend')">
+        <span class="section-title">Segments</span><span class="section-arrow">▾</span>
+      </div>
+      <div id="legend"></div>
+    </div>
+
+  </aside>
+
+  <!-- PLOT 3D -->
+  <main id="plot-area">
+    <canvas id="glcanvas"></canvas>
+    <div class="axis-badge" id="lx">X</div>
+    <div class="axis-badge" id="ly">Y</div>
+    <div class="axis-badge" id="lz">Z</div>
+    <div id="cam-controls">
+      <div class="cam-btn" onclick="resetCamera()">⌂</div>
+      <div class="cam-btn" onclick="zoom(+2)">+</div>
+      <div class="cam-btn" onclick="zoom(-2)">−</div>
+    </div>
+    <div id="tooltip"></div>
+    <div id="watermark">AKWA GAZ — K-MEANS 3D</div>
+    <div id="debug-log"></div>
+    <div id="plot-overlay">
+      <div class="overlay-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="6"  cy="6"  r="3" fill="#00d4ff"/>
+          <circle cx="18" cy="6"  r="3" fill="#ffb830"/>
+          <circle cx="6"  cy="18" r="3" fill="#ff5f5f"/>
+          <circle cx="18" cy="18" r="3" fill="#39d98a"/>
+        </svg>
+      </div>
+      <span class="overlay-text" id="overlay-text">Chargement…</span>
+    </div>
+  </main>
+
+  <footer id="statusbar">
+    <div class="status-item">
+      <div class="dot ok" id="st-dot"></div>
+      <span id="status-msg">Initialisation…</span>
+    </div>
+    <div class="status-item" style="margin-left:auto"><span id="st-iter"></span></div>
+    <div class="status-item"><span id="st-time"></span></div>
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════
+const FEATS = [
+  { id:"log_recence",          label:"Récence (log)",    idx:0 },
+  { id:"log_frequence",        label:"Fréquence (log)",  idx:1 },
+  { id:"log_tonnage",          label:"Tonnage (log)",    idx:2 },
+  { id:"poids_unitaire_moyen", label:"Poids unitaire",   idx:3 },
+  { id:"log_inter_achat",      label:"Inter-achat (log)",idx:4 },
+  { id:"cv_mensuel",           label:"CV Mensuel",       idx:5 },
+  { id:"sqrt_pct_q1",          label:"% Q1",             idx:6 },
+  { id:"sqrt_pct_q2",          label:"% Q2",             idx:7 },
+  { id:"sqrt_pct_q3",          label:"% Q3",             idx:8 },
+  { id:"sqrt_pct_q4",          label:"% Q4",             idx:9 },
+  { id:"sin_pic",              label:"Sin pic",          idx:10 },
+  { id:"cos_pic",              label:"Cos pic",          idx:11 },
+];
+const NF = FEATS.length; // 12
+
+const SEGS = [
+  { id:0, label:"Champions",            hex:"#00d4ff", r:0.00, g:0.83, b:1.00 },
+  { id:1, label:"Actifs Modérés Hiver", hex:"#ffb830", r:1.00, g:0.72, b:0.19 },
+  { id:2, label:"PDV Dormants",         hex:"#ff5f5f", r:1.00, g:0.37, b:0.37 },
+  { id:3, label:"Actifs Faibles Été",   hex:"#39d98a", r:0.22, g:0.85, b:0.54 },
+];
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const D = {
+  N: 0,
+  pdvKeys:    null,   // Uint32Array
+  clusterIds: null,   // Uint8Array  (labels CSV)
+  features:   null,   // Float32Array  N×NF
+  // après clustering
+  kmeansLabels: null, // Int32Array
+  centroids:    null, // Float32Array  4×NF
+  // pour l'affichage
+  activeLabels: null, // labels actifs (real ou kmeans)
+  // positions normalisées pour les 3 axes sélectionnés
+  posX: null, posY: null, posZ: null,
+  hidden: new Set(),
+  elbowDone: false,
+};
+
+// ═══════════════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════════════
+const CAM = { theta:0.8, phi:1.1, r:16, dragging:false, lx:0, ly:0 };
+
+// ═══════════════════════════════════════════════════
+// WEBGL
+// ═══════════════════════════════════════════════════
+let gl = null, prog = null;
+let uMVP, uPtSz, uAlpha;
+let renderPending = false;
+let pointBuf = null, pointCount = 0;
+let centBuf  = null, centCount  = 0;
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  dbg('DOM ready');
+  buildSelects();
+  initGL();
+  loadBinary();
+});
+
+function buildSelects() {
+  const def = ['log_recence','log_frequence','log_tonnage'];
+  ['axeX','axeY','axeZ'].forEach((sid, i) => {
+    const sel = document.getElementById(sid);
+    FEATS.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.id; o.textContent = f.label;
+      if (f.id === def[i]) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => { computePositions(); scheduleRender(); });
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// WEBGL INIT
+// ═══════════════════════════════════════════════════
+function initGL() {
+  const canvas = document.getElementById('glcanvas');
+  const opts   = { antialias:false, alpha:false, depth:true,
+                   failIfMajorPerformanceCaveat:false };
+
+  gl = canvas.getContext('webgl', opts)
+    || canvas.getContext('experimental-webgl', opts);
+
+  if (!gl) {
+    setStatus('WebGL indisponible dans Tableau — hébergez sur GitHub Pages', 'error');
+    dbg('WebGL FAILED');
+    return;
+  }
+
+  dbg('WebGL OK : ' + (gl.getParameter(gl.RENDERER) || 'unknown'));
+
+  // Vertex shader
+  const VS = `
+    attribute vec3 aPos;
+    attribute vec3 aCol;
+    uniform   mat4 uMVP;
+    uniform  float uPtSz;
+    varying   vec3 vCol;
+    void main(){
+      gl_Position  = uMVP * vec4(aPos,1.0);
+      gl_PointSize = uPtSz;
+      vCol = aCol;
+    }`;
+
+  // Fragment shader
+  const FS = `
+    precision mediump float;
+    varying vec3 vCol;
+    uniform float uAlpha;
+    void main(){
+      vec2 d = gl_PointCoord - .5;
+      if(dot(d,d)>.25) discard;
+      gl_FragColor = vec4(vCol, uAlpha);
+    }`;
+
+  prog = buildProg(VS, FS);
+  if (!prog) { dbg('Shader build FAILED'); return; }
+
+  uMVP  = gl.getUniformLocation(prog, 'uMVP');
+  uPtSz = gl.getUniformLocation(prog, 'uPtSz');
+  uAlpha= gl.getUniformLocation(prog, 'uAlpha');
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0.039, 0.047, 0.059, 1);
+
+  // Resize observer
+  const wrap = document.getElementById('plot-area');
+  new ResizeObserver(() => {
+    canvas.width  = wrap.clientWidth;
+    canvas.height = wrap.clientHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    scheduleRender();
+  }).observe(wrap);
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  gl.viewport(0,0,canvas.width,canvas.height);
+
+  // Souris
+  canvas.addEventListener('mousedown', e=>{ CAM.dragging=true; CAM.lx=e.clientX; CAM.ly=e.clientY; });
+  canvas.addEventListener('mouseup',   ()=> CAM.dragging=false);
+  canvas.addEventListener('mouseleave',()=> CAM.dragging=false);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('wheel', e=>{ CAM.r=Math.max(4,Math.min(40,CAM.r+e.deltaY*.02)); scheduleRender(); },{passive:true});
+
+  scheduleRender();
+}
+
+function buildProg(vs, fs) {
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(s)); return null;
+    }
+    return s;
+  };
+  const v = compile(gl.VERTEX_SHADER, vs);
+  const f = compile(gl.FRAGMENT_SHADER, fs);
+  if (!v||!f) return null;
+  const p = gl.createProgram();
+  gl.attachShader(p,v); gl.attachShader(p,f); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(p)); return null; }
+  return p;
+}
+
+// ═══════════════════════════════════════════════════
+// CHARGEMENT BINAIRE (3.2 MB)
+// ═══════════════════════════════════════════════════
+async function loadBinary() {
+  setStatus('Chargement des données (3.2 MB)…', 'ok');
+  dbg('Fetching rfm_data.bin…');
+  try {
+    const res = await fetch('rfm_data.bin');
+    if (!res.ok) throw new Error(`HTTP ${res.status} — rfm_data.bin introuvable`);
+    const buf = await res.arrayBuffer();
+    dbg(`Reçu : ${(buf.byteLength/1e6).toFixed(1)} MB`);
+    parseBinary(buf);
+  } catch(e) {
+    setStatus('Erreur : ' + e.message, 'error');
+    dbg('ERREUR : ' + e.message);
+    document.getElementById('overlay-text').textContent = '⚠ ' + e.message;
+  }
+}
+
+function parseBinary(buf) {
+  const view = new DataView(buf);
+  let off = 0;
+
+  const N  = view.getUint32(off, true); off += 4;
+  const NF = view.getUint8(off);        off += 1;
+
+  D.N         = N;
+  D.pdvKeys   = new Uint32Array(N);
+  D.clusterIds= new Uint8Array(N);
+  D.features  = new Float32Array(N * NF);
+
+  for (let i = 0; i < N; i++) {
+    D.pdvKeys[i]    = view.getUint32(off, true); off += 4;
+    D.clusterIds[i] = view.getUint8(off);         off += 1;
+    for (let f = 0; f < NF; f++) {
+      D.features[i*NF + f] = view.getFloat32(off, true); off += 4;
+    }
+  }
+
+  dbg(`Parsé : ${N} PDV, ${NF} features`);
+  setStatus(`${N.toLocaleString('fr-FR')} PDV chargés`, 'ok');
+  document.getElementById('m-points').textContent     = N.toLocaleString('fr-FR');
+  document.getElementById('badge-source').textContent = `${N.toLocaleString('fr-FR')} PDV réels`;
+  document.getElementById('overlay-text').textContent = 'Cliquez "Lancer le clustering"';
+
+  // Afficher segments réels immédiatement
+  D.activeLabels = D.clusterIds;
+  computePositions();
+  buildPointBuffer();
+  scheduleRender();
+  renderLegend();
+}
+
+// ═══════════════════════════════════════════════════
+// NORMALISER LES POSITIONS 3D
+// ═══════════════════════════════════════════════════
+function computePositions() {
+  if (!D.features) return;
+
+  const diX = FEATS.findIndex(f => f.id === document.getElementById('axeX').value);
+  const diY = FEATS.findIndex(f => f.id === document.getElementById('axeY').value);
+  const diZ = FEATS.findIndex(f => f.id === document.getElementById('axeZ').value);
+
+  D.posX = normalizeCol(diX);
+  D.posY = normalizeCol(diY);
+  D.posZ = normalizeCol(diZ);
+
+  // Labels axes
+  document.getElementById('lx').textContent = 'X : ' + FEATS[diX].label;
+  document.getElementById('ly').textContent = 'Y : ' + FEATS[diY].label;
+  document.getElementById('lz').textContent = 'Z : ' + FEATS[diZ].label;
+}
+
+function normalizeCol(di) {
+  const N = D.N;
+  let mn = Infinity, mx = -Infinity;
+  for (let i=0;i<N;i++) { const v=D.features[i*NF+di]; if(v<mn)mn=v; if(v>mx)mx=v; }
+  const range = mx-mn || 1;
+  const out = new Float32Array(N);
+  for (let i=0;i<N;i++) out[i] = ((D.features[i*NF+di]-mn)/range)*10-5;
+  return out;
+}
+
+// ═══════════════════════════════════════════════════
+// PIPELINE K-MEANS
+// ═══════════════════════════════════════════════════
+async function runPipeline() {
+  if (!D.features) { setStatus('Données non chargées', 'warn'); return; }
+  if (!gl)         { setStatus('WebGL requis', 'error'); return; }
+
+  dbg('runPipeline START');
+  const btn = document.getElementById('btn-run');
+  btn.classList.add('loading');
+
+  try {
+    const t0     = performance.now();
+    const doNorm = document.getElementById('toggle-norm').checked;
+    const maxIter= parseInt(document.getElementById('iter-slider').value);
+    const nInit  = parseInt(document.getElementById('ninit-slider').value);
+    const N = D.N;
+
+    setStatus('Préparation des features…', 'ok'); await tick();
+    dbg('Building points array…');
+
+    // Construire tableau de points pour KMeansEngine
+    const pts = [];
+    for (let i=0;i<N;i++) {
+      const row = [];
+      for (let f=0;f<NF;f++) row.push(D.features[i*NF+f]);
+      pts.push(row);
+    }
+
+    let normalized = pts;
+    if (doNorm) {
+      dbg('Z-score normalizing…');
+      normalized = KMeansEngine.zScoreNormalize(pts).normalized;
+    }
+
+    setStatus('K-Means k=4…', 'ok'); await tick();
+    dbg('Running K-Means…');
+    const result = KMeansEngine.kMeans(normalized, 4, { maxIter, nInit });
+    dbg(`K-Means done: ${result.iterations} iter, inertia=${result.inertia.toFixed(0)}`);
+
+    D.kmeansLabels = new Int32Array(result.labels);
+    D.centroids    = result.centroids;
+
+    const elapsed = ((performance.now()-t0)/1000).toFixed(2);
+
+    setStatus('Silhouette…', 'ok'); await tick();
+    const sil = KMeansEngine.silhouetteScore(normalized, result.labels, 600);
+
+    applyLabels();
+    buildPointBuffer();
+    buildCentroidBuffer();
+    scheduleRender();
+    renderLegend();
+
+    if (!D.elbowDone) { D.elbowDone=true; computeElbow(normalized); }
+
+    document.getElementById('m-silhouette').textContent = sil.toFixed(3);
+    document.getElementById('m-inertia').textContent    = result.inertia>999
+      ? (result.inertia/1000).toFixed(1)+'k' : result.inertia.toFixed(1);
+    document.getElementById('st-iter').textContent = `${result.iterations} iter.`;
+    document.getElementById('st-time').textContent = `${elapsed}s`;
+    setStatus(`Terminé — silhouette ${sil.toFixed(3)}`, 'ok');
+    document.getElementById('plot-overlay').classList.add('hidden');
+    dbg('Pipeline DONE');
+
+  } catch(e) {
+    setStatus('Erreur : '+e.message, 'error');
+    dbg('ERREUR : '+e.message);
+    console.error(e);
+  } finally {
+    btn.classList.remove('loading');
+  }
+}
+
+function applyLabels() {
+  const useReal = document.getElementById('toggle-real-seg').checked;
+  D.activeLabels = useReal ? D.clusterIds : (D.kmeansLabels || D.clusterIds);
+  if (D.features) { buildPointBuffer(); renderLegend(); }
+}
+
+// ═══════════════════════════════════════════════════
+// BUFFERS GPU
+// ═══════════════════════════════════════════════════
+function buildPointBuffer() {
+  if (!gl || !D.posX) return;
+
+  const N      = D.N;
+  const labels = D.activeLabels;
+  const hidden = D.hidden;
+
+  // Compter les points visibles
+  let visible = 0;
+  for (let i=0;i<N;i++) if (!hidden.has(labels[i])) visible++;
+
+  // Interleaved: x y z r g b (6 floats)
+  const data = new Float32Array(visible * 6);
+  let j = 0;
+  for (let i=0;i<N;i++) {
+    const seg = SEGS[labels[i]];
+    if (!seg || hidden.has(labels[i])) continue;
+    data[j*6+0] = D.posX[i];
+    data[j*6+1] = D.posY[i];
+    data[j*6+2] = D.posZ[i];
+    data[j*6+3] = seg.r;
+    data[j*6+4] = seg.g;
+    data[j*6+5] = seg.b;
+    j++;
+  }
+
+  if (!pointBuf) pointBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  pointCount = visible;
+  dbg(`Point buffer: ${visible} points`);
+}
+
+function buildCentroidBuffer() {
+  if (!gl || !D.centroids || !D.posX) return;
+
+  const diX = FEATS.findIndex(f=>f.id===document.getElementById('axeX').value);
+  const diY = FEATS.findIndex(f=>f.id===document.getElementById('axeY').value);
+  const diZ = FEATS.findIndex(f=>f.id===document.getElementById('axeZ').value);
+
+  // Recalculer min/max pour les axes sélectionnés
+  const N = D.N;
+  const getMinMax = di => {
+    let mn=Infinity, mx=-Infinity;
+    for(let i=0;i<N;i++){const v=D.features[i*NF+di];if(v<mn)mn=v;if(v>mx)mx=v;}
+    return [mn,mx];
+  };
+  const [mnX,mxX]=getMinMax(diX), [mnY,mxY]=getMinMax(diY), [mnZ,mxZ]=getMinMax(diZ);
+  const sc=(v,mn,mx)=>((v-mn)/(mx-mn||1))*10-5;
+
+  const K    = D.centroids.length;
+  const data = new Float32Array(K * 6);
+  D.centroids.forEach((c,i)=>{
+    const seg = SEGS[i];
+    data[i*6+0]=sc(c[diX],mnX,mxX);
+    data[i*6+1]=sc(c[diY],mnY,mxY);
+    data[i*6+2]=sc(c[diZ],mnZ,mxZ);
+    data[i*6+3]=seg?seg.r:1;
+    data[i*6+4]=seg?seg.g:1;
+    data[i*6+5]=seg?seg.b:1;
+  });
+
+  if (!centBuf) centBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, centBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  centCount = K;
+}
+
+// ═══════════════════════════════════════════════════
+// RENDU WEBGL
+// ═══════════════════════════════════════════════════
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(doRender);
+}
+
+function doRender() {
+  renderPending = false;
+  if (!gl || !prog || !pointBuf || pointCount===0) return;
+
+  const c = document.getElementById('glcanvas');
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const mvp   = getMVP(c.width/c.height);
+  const ptSz  = parseFloat(document.getElementById('point-size').value);
+  const alpha = parseFloat(document.getElementById('alpha').value)/100;
+  const showC = document.getElementById('toggle-centroids').checked;
+  const STRIDE = 6*4;
+
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(uMVP, false, new Float32Array(mvp));
+
+  const aPos = gl.getAttribLocation(prog,'aPos');
+  const aCol = gl.getAttribLocation(prog,'aCol');
+
+  // Points
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointBuf);
+  gl.enableVertexAttribArray(aPos);
+  gl.enableVertexAttribArray(aCol);
+  gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, STRIDE, 0);
+  gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, STRIDE, 12);
+  gl.uniform1f(uPtSz, ptSz);
+  gl.uniform1f(uAlpha, alpha);
+  gl.drawArrays(gl.POINTS, 0, pointCount);
+
+  // Centroïdes
+  if (showC && centBuf && centCount>0) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, centBuf);
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, STRIDE, 0);
+    gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, STRIDE, 12);
+    gl.uniform1f(uPtSz, ptSz*5);
+    gl.uniform1f(uAlpha, 1.0);
+    gl.drawArrays(gl.POINTS, 0, centCount);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// MATRICE MVP
+// ═══════════════════════════════════════════════════
+function getMVP(aspect) {
+  const fov=Math.PI/4, near=0.1, far=100;
+  const f=1/Math.tan(fov/2);
+  const P=[
+    f/aspect,0,0,0, 0,f,0,0,
+    0,0,(far+near)/(near-far),-1,
+    0,0,(2*far*near)/(near-far),0
+  ];
+  const {theta,phi,r}=CAM;
+  const eye=[r*Math.sin(phi)*Math.cos(theta), r*Math.cos(phi), r*Math.sin(phi)*Math.sin(theta)];
+  const V = lookAt(eye,[0,0,0],[0,1,0]);
+  return mul4(P,V);
+}
+
+function lookAt(eye,at,up){
+  const z=nrm([eye[0]-at[0],eye[1]-at[1],eye[2]-at[2]]);
+  const x=nrm(crs(up,z)), y=crs(z,x);
+  return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+          -dot(x,eye),-dot(y,eye),-dot(z,eye),1];
+}
+function nrm(v){const l=Math.hypot(...v)||1;return v.map(x=>x/l);}
+function crs(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function mul4(a,b){
+  const r=new Array(16).fill(0);
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)for(let k=0;k<4;k++)r[i*4+j]+=a[i*4+k]*b[k*4+j];
+  return r;
+}
+
+// ═══════════════════════════════════════════════════
+// SOURIS
+// ═══════════════════════════════════════════════════
+function onMove(e) {
+  if (CAM.dragging) {
+    CAM.theta -= (e.clientX-CAM.lx)*0.008;
+    CAM.phi    = Math.max(0.1,Math.min(Math.PI-0.1,CAM.phi+(e.clientY-CAM.ly)*0.008));
+    CAM.lx=e.clientX; CAM.ly=e.clientY;
+    scheduleRender();
+  }
+  // Tooltip simple (survol non-raycasting pour perf)
+  const canvas=document.getElementById('glcanvas');
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const W=canvas.width, H=canvas.height;
+  if(!D.posX||!D.activeLabels)return;
+
+  const mvp=getMVP(W/H); const mvpF=new Float32Array(mvp);
+  let best=-1, bestD=15;
+  const step=Math.max(1,Math.floor(D.N/3000));
+
+  for(let i=0;i<D.N;i+=step){
+    const l=D.activeLabels[i];
+    if(D.hidden.has(l))continue;
+    const [sx,sy]=proj(D.posX[i],D.posY[i],D.posZ[i],mvpF,W,H);
+    const d=Math.hypot(sx-mx,sy-my);
+    if(d<bestD){bestD=d;best=i;}
+  }
+
+  const tt=document.getElementById('tooltip');
+  if(best<0){tt.classList.remove('visible');return;}
+
+  const seg=SEGS[D.activeLabels[best]];
+  const axX=document.getElementById('axeX').value;
+  const axY=document.getElementById('axeY').value;
+  const axZ=document.getElementById('axeZ').value;
+  const diX=FEATS.findIndex(f=>f.id===axX);
+  const diY=FEATS.findIndex(f=>f.id===axY);
+  const diZ=FEATS.findIndex(f=>f.id===axZ);
+  const lbl=id=>FEATS.find(f=>f.id===id)?.label||id;
+
+  tt.innerHTML=`<span style="color:${seg.hex}">■ ${seg.label}</span><br>
+    PDV: ${D.pdvKeys[best]}<br>
+    X ${lbl(axX)}: ${D.features[best*NF+diX].toFixed(3)}<br>
+    Y ${lbl(axY)}: ${D.features[best*NF+diY].toFixed(3)}<br>
+    Z ${lbl(axZ)}: ${D.features[best*NF+diZ].toFixed(3)}`;
+
+  let tx=mx+14, ty=my-20;
+  if(tx+200>W)tx=mx-214;
+  if(ty+100>H)ty=my-110;
+  tt.style.left=tx+'px'; tt.style.top=ty+'px';
+  tt.classList.add('visible');
+}
+
+function proj(x,y,z,m,W,H){
+  const w=m[3]*x+m[7]*y+m[11]*z+m[15];
+  return [((m[0]*x+m[4]*y+m[8]*z+m[12])/w+1)/2*W,
+          (1-(m[1]*x+m[5]*y+m[9]*z+m[13])/w)/2*H];
+}
+
+function resetCamera(){CAM.theta=0.8;CAM.phi=1.1;CAM.r=16;scheduleRender();}
+function zoom(d){CAM.r=Math.max(4,Math.min(40,CAM.r+d));scheduleRender();}
+
+// ═══════════════════════════════════════════════════
+// LÉGENDE
+// ═══════════════════════════════════════════════════
+function renderLegend() {
+  const labels = D.activeLabels;
+  if (!labels) return;
+  const counts={};
+  for(let i=0;i<D.N;i++){const l=labels[i];counts[l]=(counts[l]||0)+1;}
+  const total=Object.values(counts).reduce((s,v)=>s+v,0);
+  const lg=document.getElementById('legend');
+  lg.innerHTML='';
+  SEGS.forEach(seg=>{
+    const cnt=counts[seg.id]||0;
+    const pct=total?((cnt/total)*100).toFixed(1):'0.0';
+    const item=document.createElement('div');
+    item.className='legend-item';
+    item.innerHTML=`
+      <div class="legend-dot" style="background:${seg.hex};color:${seg.hex}"></div>
+      <span class="legend-name">${seg.label}</span>
+      <span class="legend-count">${cnt.toLocaleString('fr-FR')} (${pct}%)</span>`;
+    item.onclick=()=>{
+      const h=D.hidden.has(seg.id);
+      h?D.hidden.delete(seg.id):D.hidden.add(seg.id);
+      item.classList.toggle('muted',!h);
+      buildPointBuffer();
+      scheduleRender();
+    };
+    lg.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// COURBE DU COUDE
+// ═══════════════════════════════════════════════════
+async function computeElbow(normalized) {
+  const sample=normalized.length>3000
+    ?[...normalized].sort(()=>Math.random()-.5).slice(0,3000):normalized;
+  const data=KMeansEngine.elbowMethod(sample,2,7);
+  const cv=document.getElementById('elbow-canvas');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height,pad={t:8,r:8,b:18,l:36};
+  ctx.clearRect(0,0,W,H);
+  const inerties=data.map(d=>d.inertia);
+  const minI=Math.min(...inerties),maxI=Math.max(...inerties),range=maxI-minI||1;
+  const xs=data.map((_,i)=>pad.l+(i/(data.length-1||1))*(W-pad.l-pad.r));
+  const ys=data.map(d=>H-pad.b-((d.inertia-minI)/range)*(H-pad.t-pad.b));
+  ctx.strokeStyle='#2a3040';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
+  ctx.fillStyle='#3d4a5c';ctx.font='8px IBM Plex Mono,monospace';ctx.textAlign='center';
+  data.forEach((d,i)=>ctx.fillText(d.k,xs[i],H-4));
+  ctx.strokeStyle='#2a3040';ctx.lineWidth=1.5;
+  ctx.beginPath();xs.forEach((x,i)=>i===0?ctx.moveTo(x,ys[i]):ctx.lineTo(x,ys[i]));ctx.stroke();
+  data.forEach((d,i)=>{
+    ctx.beginPath();ctx.arc(xs[i],ys[i],d.k===4?4:2.5,0,Math.PI*2);
+    ctx.fillStyle=d.k===4?'#00d4ff':'#7a8899';
+    if(d.k===4){ctx.shadowColor='#00d4ff';ctx.shadowBlur=8;}
+    ctx.fill();ctx.shadowBlur=0;
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// DEBUG LOG
+// ═══════════════════════════════════════════════════
+let dbgTimer=null;
+function dbg(msg) {
+  console.log('[KM3D]', msg);
+  const el=document.getElementById('debug-log');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(dbgTimer);
+  dbgTimer=setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function toggleSection(id){document.getElementById(id).classList.toggle('collapsed');}
+function setStatus(msg,type='ok'){
+  document.getElementById('status-msg').textContent=msg;
+  document.getElementById('st-dot').className=`dot ${type}`;
+}
+function tick(){return new Promise(r=>setTimeout(r,20));}
+</script>
+</body>
+</html>
