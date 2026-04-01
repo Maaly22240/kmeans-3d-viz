@@ -2,162 +2,118 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>K-Means 3D WebGL — Akwa Gaz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K-Means 3D — Akwa Gaz RFM</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/tableau-extensions@1/dist/tableau.extensions.1.latest.js"></script>
+  <script src="kmeans.js"></script>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{background:#0a0c0f;font-family:'IBM Plex Mono',monospace;}
-    #app{display:grid;grid-template-rows:48px 1fr 32px;grid-template-columns:240px 1fr;height:100vh;color:#c8d4e8;}
-    #header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 16px;background:#0d1017;border-bottom:1px solid #1a2030;}
-    #header h1{font-size:13px;font-weight:500;letter-spacing:.06em;color:#c8d4e8;}
-    #header h1 span{color:#00d4ff;}
-    .dot-live{width:6px;height:6px;border-radius:50%;background:#39d98a;animation:pulse 2s infinite;}
-    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-    #badge-source{font-size:10px;color:#7a8899;margin-left:4px;}
-    #sidebar{background:#0d1017;border-right:1px solid #1a2030;overflow-y:auto;padding:8px 0;}
-    .section{border-bottom:1px solid #1a2030;}
-    .section-header{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;}
-    .section-header:hover{background:#161e2e;}
-    .section-title{font-size:10px;letter-spacing:.1em;color:#7a8899;text-transform:uppercase;}
-    .section-arrow{font-size:10px;color:#3d4a5c;transition:.2s;}
-    .section.collapsed .section-arrow{transform:rotate(-90deg);}
-    .section.collapsed .section-body,
-    .section.collapsed .metrics-grid,
-    .section.collapsed #elbow-container,
-    .section.collapsed #legend{display:none;}
-    .section-body{padding:8px 12px 12px;}
-    .control-group{margin-bottom:10px;}
-    .control-label{display:block;font-size:9px;color:#7a8899;letter-spacing:.07em;margin-bottom:4px;}
-    select,input[type=range]{width:100%;background:#0a0c0f;border:1px solid #1a2030;color:#c8d4e8;font-size:10px;padding:4px 6px;border-radius:3px;font-family:inherit;}
-    select:focus{outline:none;border-color:#00d4ff44;}
-    .value-badge{display:inline-block;background:#161e2e;border:1px solid #1a2030;border-radius:2px;padding:0 5px;font-size:9px;color:#00d4ff;margin-left:4px;}
-    .toggle-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;}
-    .toggle-label{font-size:9px;color:#7a8899;}
-    .toggle{position:relative;display:inline-block;width:28px;height:15px;}
-    .toggle input{opacity:0;width:0;height:0;}
-    .toggle-track{position:absolute;inset:0;background:#1a2030;border-radius:8px;transition:.2s;cursor:pointer;}
-    .toggle-track::before{content:'';position:absolute;width:11px;height:11px;left:2px;bottom:2px;background:#3d4a5c;border-radius:50%;transition:.2s;}
-    .toggle input:checked+.toggle-track{background:#00d4ff22;}
-    .toggle input:checked+.toggle-track::before{transform:translateX(13px);background:#00d4ff;}
-    #btn-run{display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 12px;padding:7px;background:#00d4ff12;border:1px solid #00d4ff44;border-radius:3px;color:#00d4ff;font-size:10px;cursor:pointer;font-family:inherit;letter-spacing:.08em;transition:.15s;}
-    #btn-run:hover{background:#00d4ff22;}
-    #btn-run.loading .btn-icon{display:none;}
-    #btn-run.loading .spinner{display:block;}
-    .spinner{display:none;width:12px;height:12px;border:1.5px solid #00d4ff44;border-top-color:#00d4ff;border-radius:50%;animation:spin .6s linear infinite;}
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 12px 12px;}
-    .metric-card{background:#0a0c0f;border:1px solid #1a2030;border-radius:3px;padding:6px 8px;text-align:center;}
-    .metric-value{font-size:14px;color:#c8d4e8;}
-    .metric-value.amber{color:#ffb830;}
-    .metric-value.green{color:#39d98a;}
-    .metric-label{font-size:8px;color:#3d4a5c;letter-spacing:.1em;margin-top:2px;}
-    #elbow-container{padding:8px 12px 12px;}
-    #elbow-canvas{border:1px solid #1a2030;background:#0a0c0f;border-radius:2px;}
-    #legend{padding:4px 12px 12px;}
-    .legend-item{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;user-select:none;}
-    .legend-item.muted{opacity:.35;}
-    .legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-    .legend-name{font-size:9px;color:#c8d4e8;flex:1;}
-    .legend-count{font-size:9px;color:#3d4a5c;}
-    #plot-area{position:relative;background:#0a0c0f;overflow:hidden;}
-    #webgl-canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;display:block;}
-    #webgl-canvas:active{cursor:grabbing;}
-    .axis-badge{position:absolute;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.07em;pointer-events:none;padding:2px 7px;border-radius:2px;z-index:8;}
-    #lx{bottom:42px;left:50%;transform:translateX(-50%);background:#00d4ff18;color:#00d4ff;}
-    #ly{top:50%;left:6px;writing-mode:vertical-rl;transform:translateY(-50%) rotate(180deg);background:#ffb83018;color:#ffb830;}
-    #lz{top:10px;right:12px;background:#39d98a18;color:#39d98a;}
-    #cam-controls{position:absolute;bottom:42px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:10;}
-    .cam-btn{width:28px;height:28px;background:#0d1017;border:1px solid #1a2030;border-radius:3px;color:#7a8899;font-size:14px;display:grid;place-items:center;cursor:pointer;user-select:none;transition:.15s;}
-    .cam-btn:hover{border-color:#00d4ff44;color:#00d4ff;}
-    #tooltip{position:absolute;background:#0d1017;border:1px solid #1a2030;border-radius:3px;padding:6px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c8d4e8;pointer-events:none;opacity:0;transition:opacity 120ms;z-index:20;white-space:nowrap;line-height:1.8;}
-    #tooltip.visible{opacity:1;}
-    #plot-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:15;pointer-events:none;}
-    #plot-overlay.hidden{display:none;}
-    .overlay-icon svg{opacity:.5;}
-    #overlay-text{font-size:11px;color:#7a8899;letter-spacing:.08em;}
-    /* ── Panneau d'erreur — s'affiche dans le graphe ── */
-    #error-panel{
-      position:absolute;inset:20px;display:none;
-      flex-direction:column;align-items:center;justify-content:center;gap:14px;
-      background:#110808;border:1px solid #ff5f5f55;border-radius:6px;
-      z-index:30;padding:28px 24px;
+    #plot-area { overflow: hidden; position: relative; }
+
+    #glcanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
     }
-    #error-panel.visible{display:flex;}
-    .error-icon{font-size:28px;color:#ff5f5f;}
-    .error-title{font-size:11px;letter-spacing:.12em;color:#ff5f5f;}
-    .error-msg{
-      font-size:10px;color:#c8d4e8;text-align:center;word-break:break-word;
-      max-width:420px;line-height:1.75;
-      background:#0d0606;border:1px solid #ff5f5f22;border-radius:4px;padding:10px 14px;
+    #glcanvas:active { cursor: grabbing; }
+
+    /* Axes badges */
+    .axis-badge {
+      position: absolute;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.07em;
+      pointer-events: none;
+      padding: 2px 7px;
+      border-radius: 2px;
+      z-index: 8;
     }
-    .error-trace{
-      font-size:9px;color:#7a8899;text-align:left;max-width:420px;
-      line-height:1.6;word-break:break-all;white-space:pre-wrap;
-      background:#0a0808;border:1px solid #ff5f5f11;border-radius:3px;
-      padding:8px 10px;width:100%;
+    #lx { bottom: 36px; left: 50%; transform: translateX(-50%); background:#00d4ff18; color:#00d4ff; }
+    #ly { top: 50%; left: 8px; writing-mode:vertical-rl; transform:translateY(-50%) rotate(180deg); background:#ffb83018; color:#ffb830; }
+    #lz { top: 10px; right: 12px; background:#39d98a18; color:#39d98a; }
+
+    /* Cam buttons */
+    #cam-controls {
+      position: absolute; bottom: 36px; right: 12px;
+      display: flex; flex-direction: column; gap: 4px; z-index: 10;
     }
-    .error-dismiss{
-      font-size:10px;color:#ff5f5f;background:#ff5f5f12;
-      border:1px solid #ff5f5f44;border-radius:3px;
-      padding:5px 16px;cursor:pointer;font-family:'IBM Plex Mono',monospace;
-      letter-spacing:.06em;transition:.15s;
+    .cam-btn {
+      width: 28px; height: 28px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-secondary);
+      font-size: 14px; display: grid; place-items: center;
+      cursor: pointer; transition: all var(--transition); user-select: none;
     }
-    .error-dismiss:hover{background:#ff5f5f22;}
-    #watermark{position:absolute;bottom:8px;left:14px;font-size:9px;letter-spacing:.18em;color:#1a2030;pointer-events:none;z-index:5;}
-    #statusbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 14px;background:#0d1017;border-top:1px solid #1a2030;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#7a8899;}
-    .dot{width:6px;height:6px;border-radius:50%;background:#39d98a;flex-shrink:0;}
-    .dot.error{background:#ff5f5f;}
-    .dot.warn{background:#ffb830;}
+    .cam-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); }
+
+    /* Tooltip */
+    #tooltip {
+      position: absolute;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 6px 10px;
+      font-family: var(--font-mono); font-size: 10px; color: var(--text-primary);
+      pointer-events: none; opacity: 0; transition: opacity 120ms ease;
+      z-index: 20; white-space: nowrap; line-height: 1.8;
+    }
+    #tooltip.visible { opacity: 1; }
+
+    #watermark {
+      position: absolute; bottom: 8px; left: 14px;
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 0.18em; color: var(--text-muted);
+      pointer-events: none; z-index: 5;
+    }
   </style>
 </head>
 <body>
 <div id="app">
 
-  <!-- ══ HEADER ══════════════════════════════════════════ -->
   <header id="header">
-    <svg viewBox="0 0 16 16" fill="none" style="width:16px;height:16px;flex-shrink:0">
-      <circle cx="4"  cy="4"  r="2" fill="#00d4ff"/>
-      <circle cx="12" cy="4"  r="2" fill="#ffb830"/>
-      <circle cx="4"  cy="12" r="2" fill="#ff5f5f"/>
-      <circle cx="12" cy="12" r="2" fill="#39d98a"/>
-    </svg>
-    <h1>K-Means <span>3D</span> — Akwa Gaz
-      <span style="color:#3d4a5c;font-size:10px;font-weight:400;margin-left:8px">WebGL</span>
-    </h1>
-    <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+    <div class="header-logo">
+      <svg viewBox="0 0 16 16" fill="none">
+        <circle cx="4"  cy="4"  r="2" fill="#00d4ff"/>
+        <circle cx="12" cy="4"  r="2" fill="#ffb830"/>
+        <circle cx="4"  cy="12" r="2" fill="#ff5f5f"/>
+        <circle cx="12" cy="12" r="2" fill="#39d98a"/>
+      </svg>
+    </div>
+    <h1>K-Means <span>3D</span> — Akwa Gaz</h1>
+    <div class="header-badge">
       <div class="dot-live"></div>
       <span id="badge-source">Chargement…</span>
     </div>
   </header>
 
-  <!-- ══ SIDEBAR ═════════════════════════════════════════ -->
   <aside id="sidebar">
-
-    <div class="section" id="sec-axes">
-      <div class="section-header" onclick="toggleSection('sec-axes')">
+    <div class="section" id="sec-features">
+      <div class="section-header" onclick="toggleSection('sec-features')">
         <span class="section-title">Axes 3D</span><span class="section-arrow">▾</span>
       </div>
       <div class="section-body">
         <div class="control-group">
-          <label class="control-label">Axe X <span style="color:#00d4ff">■</span></label>
+          <label class="control-label">Axe X <span style="color:var(--cyan)">■</span></label>
           <select id="axeX"></select>
         </div>
         <div class="control-group">
-          <label class="control-label">Axe Y <span style="color:#ffb830">■</span></label>
+          <label class="control-label">Axe Y <span style="color:var(--amber)">■</span></label>
           <select id="axeY"></select>
         </div>
         <div class="control-group">
-          <label class="control-label">Axe Z <span style="color:#39d98a">■</span></label>
+          <label class="control-label">Axe Z <span style="color:var(--green)">■</span></label>
           <select id="axeZ"></select>
         </div>
         <div class="control-group">
-          <label class="control-label">Taille <span class="value-badge" id="size-val">4</span></label>
-          <input type="range" id="point-size" min="1" max="12" value="4" step="1"
-            oninput="document.getElementById('size-val').textContent=this.value;updateMaterial()">
+          <label class="control-label">Taille points <span class="value-badge" id="size-val">4</span></label>
+          <input type="range" id="point-size" min="1" max="12" value="4"
+            oninput="document.getElementById('size-val').textContent=this.value; scheduleRender()">
         </div>
         <div class="control-group">
-          <label class="control-label">Opacité <span class="value-badge" id="alpha-val">70</span>%</label>
-          <input type="range" id="alpha" min="5" max="100" value="70" step="1"
-            oninput="document.getElementById('alpha-val').textContent=this.value;updateMaterial()">
+          <label class="control-label">Opacité <span class="value-badge" id="alpha-val">80</span>%</label>
+          <input type="range" id="alpha" min="10" max="100" value="80"
+            oninput="document.getElementById('alpha-val').textContent=this.value; scheduleRender()">
         </div>
       </div>
     </div>
@@ -168,19 +124,19 @@
       </div>
       <div class="section-body">
         <div class="control-group">
-          <label class="control-label">Clusters (k=4 fixé)</label>
-          <div style="font-size:9px;color:#3d4a5c;padding:4px 0;line-height:1.9">
+          <label class="control-label">Clusters (k fixé) <span class="value-badge" style="color:var(--amber)">4</span></label>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);padding:4px 0;line-height:1.9">
             Champions · Actifs Modérés Hiver<br>PDV Dormants · Actifs Faibles Été
           </div>
         </div>
         <div class="control-group">
-          <label class="control-label">Itérations <span class="value-badge" id="iter-val">200</span></label>
-          <input type="range" id="iter-slider" min="50" max="500" step="50" value="200"
+          <label class="control-label">Itérations max <span class="value-badge" id="iter-val">300</span></label>
+          <input type="range" id="iter-slider" min="50" max="500" step="50" value="300"
             oninput="document.getElementById('iter-val').textContent=this.value">
         </div>
         <div class="control-group">
-          <label class="control-label">nInit <span class="value-badge" id="ninit-val">3</span></label>
-          <input type="range" id="ninit-slider" min="1" max="8" value="3" step="1"
+          <label class="control-label">Relances nInit <span class="value-badge" id="ninit-val">5</span></label>
+          <input type="range" id="ninit-slider" min="1" max="10" value="5"
             oninput="document.getElementById('ninit-val').textContent=this.value">
         </div>
         <div class="toggle-row">
@@ -189,21 +145,19 @@
         </div>
         <div class="toggle-row">
           <span class="toggle-label">Centroïdes</span>
-          <label class="toggle"><input type="checkbox" id="toggle-centroids" checked
-            onchange="updateCentroidVisibility()"><span class="toggle-track"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-centroids" checked onchange="scheduleRender()"><span class="toggle-track"></span></label>
         </div>
         <div class="toggle-row">
           <span class="toggle-label">Segment réel (CSV)</span>
-          <label class="toggle"><input type="checkbox" id="toggle-real" checked
-            onchange="applyLabels()"><span class="toggle-track"></span></label>
+          <label class="toggle"><input type="checkbox" id="toggle-real-seg" checked onchange="scheduleRender()"><span class="toggle-track"></span></label>
         </div>
       </div>
     </div>
 
     <button id="btn-run" onclick="runPipeline()">
       <div class="spinner"></div>
-      <svg class="btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none">
-        <polygon points="1,0.5 9.5,5 1,9.5" fill="currentColor"/>
+      <svg class="btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <polygon points="2,1 11,6 2,11" fill="currentColor"/>
       </svg>
       <span>Lancer le clustering</span>
     </button>
@@ -225,7 +179,7 @@
         <span class="section-title">Courbe du coude</span><span class="section-arrow">▾</span>
       </div>
       <div id="elbow-container">
-        <canvas id="elbow-canvas" width="216" height="80"></canvas>
+        <canvas id="elbow-canvas" width="240" height="80"></canvas>
       </div>
     </div>
 
@@ -235,25 +189,24 @@
       </div>
       <div id="legend"></div>
     </div>
-
   </aside>
 
-  <!-- ══ PLOT AREA ════════════════════════════════════════ -->
+  <!-- ZONE 3D -->
   <main id="plot-area">
-    <canvas id="webgl-canvas"></canvas>
+    <canvas id="glcanvas"></canvas>
 
-    <div class="axis-badge" id="lx">X</div>
-    <div class="axis-badge" id="ly">Y</div>
-    <div class="axis-badge" id="lz">Z</div>
+    <div class="axis-badge" id="lx">X : Récence</div>
+    <div class="axis-badge" id="ly">Y : Fréquence</div>
+    <div class="axis-badge" id="lz">Z : Tonnage</div>
 
     <div id="cam-controls">
-      <div class="cam-btn" onclick="resetCam()"  title="Reset vue">⌂</div>
-      <div class="cam-btn" onclick="zoomCam(1)"  title="Zoom +">+</div>
-      <div class="cam-btn" onclick="zoomCam(-1)" title="Zoom −">−</div>
+      <div class="cam-btn" onclick="resetCamera()" title="Reset">⌂</div>
+      <div class="cam-btn" onclick="zoom(+1.5)"  title="Zoom +">+</div>
+      <div class="cam-btn" onclick="zoom(-1.5)"  title="Zoom −">−</div>
     </div>
 
     <div id="tooltip"></div>
-    <div id="watermark">AKWA GAZ — K-MEANS 3D — WebGL</div>
+    <div id="watermark">AKWA GAZ — K-MEANS 3D</div>
 
     <div id="plot-overlay">
       <div class="overlay-icon">
@@ -266,727 +219,675 @@
       </div>
       <span class="overlay-text" id="overlay-text">Chargement des données…</span>
     </div>
-
-    <!-- ══ PANNEAU D'ERREUR (remplace le point rouge) ══ -->
-    <div id="error-panel">
-      <div class="error-icon">⚠</div>
-      <div class="error-title" id="err-title">ERREUR</div>
-      <div class="error-msg"   id="err-msg"></div>
-      <pre class="error-trace" id="err-trace"></pre>
-      <div class="error-dismiss" onclick="dismissError()">Fermer  ✕</div>
-    </div>
-
   </main>
 
-  <!-- ══ STATUSBAR ════════════════════════════════════════ -->
   <footer id="statusbar">
-    <div style="display:flex;align-items:center;gap:6px">
-      <div class="dot" id="st-dot"></div>
+    <div class="status-item">
+      <div class="dot ok" id="st-dot"></div>
       <span id="status-msg">Initialisation…</span>
     </div>
-    <span style="margin-left:auto" id="st-iter"></span>
-    <span id="st-time"></span>
-    <span style="color:#1a2030">|</span>
-    <span id="st-renderer" style="color:#00d4ff55">WebGL</span>
+    <div class="status-item" style="margin-left:auto"><span id="st-iter"></span></div>
+    <div class="status-item"><span id="st-time"></span></div>
   </footer>
 </div>
 
-<!-- Three.js r128 (même version que l'original pour la compatibilité OrbitControls) -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="kmeans.js"></script>
 <script>
-/* ═══════════════════════════════════════════════
-   CONFIG
-═══════════════════════════════════════════════ */
-const FEATS = [
-  {id:"log_recence",          label:"Récence (log)"},
-  {id:"log_frequence",        label:"Fréquence (log)"},
-  {id:"log_tonnage",          label:"Tonnage (log)"},
-  {id:"poids_unitaire_moyen", label:"Poids unitaire"},
-  {id:"log_inter_achat",      label:"Inter-achat (log)"},
-  {id:"cv_mensuel",           label:"CV Mensuel"},
-  {id:"sqrt_pct_q1",          label:"% Q1"},
-  {id:"sqrt_pct_q2",          label:"% Q2"},
-  {id:"sqrt_pct_q3",          label:"% Q3"},
-  {id:"sqrt_pct_q4",          label:"% Q4"},
-  {id:"sin_pic",              label:"Sin pic"},
-  {id:"cos_pic",              label:"Cos pic"},
-];
-const NF = 12;
-
-const SEGS = [
-  {id:0, label:"Champions",            hex:"#00d4ff", threeColor:0x00d4ff},
-  {id:1, label:"Actifs Modérés Hiver", hex:"#ffb830", threeColor:0xffb830},
-  {id:2, label:"PDV Dormants",         hex:"#ff5f5f", threeColor:0xff5f5f},
-  {id:3, label:"Actifs Faibles Été",   hex:"#39d98a", threeColor:0x39d98a},
+// ════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════
+const RFM_FEATURES = [
+  { id:"log_recence",           label:"Récence (log)" },
+  { id:"log_frequence",         label:"Fréquence (log)" },
+  { id:"log_tonnage",           label:"Tonnage (log)" },
+  { id:"poids_unitaire_moyen",  label:"Poids unitaire" },
+  { id:"log_inter_achat",       label:"Inter-achat (log)" },
+  { id:"cv_mensuel",            label:"CV Mensuel" },
+  { id:"sqrt_pct_q1",           label:"% Q1" },
+  { id:"sqrt_pct_q2",           label:"% Q2" },
+  { id:"sqrt_pct_q3",           label:"% Q3" },
+  { id:"sqrt_pct_q4",           label:"% Q4" },
+  { id:"sin_pic",               label:"Sin pic" },
+  { id:"cos_pic",               label:"Cos pic" },
 ];
 
-/* ═══════════════════════════════════════════════
-   STATE
-═══════════════════════════════════════════════ */
-const D = {
-  N:0,
-  pdvKeys:    null,
-  clusterIds: null,
-  features:   null,
-  kLabels:    null,
-  labels:     null,
-  centroids:  null,
-  hidden:     new Set(),
-  elbowDone:  false,
+const SEGMENTS = [
+  { id:0, label:"Champions",            hex:"#00d4ff", rgb:[0.00, 0.83, 1.00] },
+  { id:1, label:"Actifs Modérés Hiver", hex:"#ffb830", rgb:[1.00, 0.72, 0.19] },
+  { id:2, label:"PDV Dormants",         hex:"#ff5f5f", rgb:[1.00, 0.37, 0.37] },
+  { id:3, label:"Actifs Faibles Été",   hex:"#39d98a", rgb:[0.22, 0.85, 0.54] },
+];
+
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+const S = {
+  rawData:[], points:[], normalized:[], labels:[],
+  lastResult:null, centroids:[], elbowDone:false,
+  hidden: new Set(),   // segments cachés
 };
 
-const D_pos = {X:null, Y:null, Z:null};
+// ════════════════════════════════════════════════
+// CAMÉRA (sphérique)
+// ════════════════════════════════════════════════
+const cam = { theta: 0.8, phi: 1.1, r: 16,
+              dragging:false, lx:0, ly:0 };
 
-/* ═══════════════════════════════════════════════
-   THREE.JS GLOBALS
-═══════════════════════════════════════════════ */
-let renderer, scene, camera;
-let pointsMeshes  = [];
-let centroidMeshes = [];
-let animId = null;
+// ════════════════════════════════════════════════
+// WEBGL STATE
+// ════════════════════════════════════════════════
+let gl, prog, progCentroid;
+let renderScheduled = false;
 
-/* ═══════════════════════════════════════════════
-   CAMÉRA — sphériques
-═══════════════════════════════════════════════ */
-const spherical = {theta:0.6, phi:1.1, radius:18};
-let isDragging = false;
-let prevMouse  = {x:0, y:0};
+// Attributs/uniformes
+let aPos, aColor, uMVP, uPointSize, uAlpha;
+let vbo = null;           // {buf, count, colors}
+let vboCentroid = null;
 
-/* ═══════════════════════════════════════════════
-   GESTION D'ERREURS — affichage dans le graphe
-═══════════════════════════════════════════════ */
-function showError(title, msg, trace) {
-  const p = document.getElementById('error-panel');
-  document.getElementById('err-title').textContent = title || 'ERREUR';
-  document.getElementById('err-msg').textContent   = msg   || 'Erreur inconnue.';
-  document.getElementById('err-trace').textContent = trace || '';
-  p.classList.add('visible');
-  setStatus(title, 'error');
-}
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  populateSelects();
+  initWebGL();
+  loadData();
+});
 
-function dismissError() {
-  document.getElementById('error-panel').classList.remove('visible');
-}
-
-/* ═══════════════════════════════════════════════
-   INIT THREE.JS
-═══════════════════════════════════════════════ */
-function initThree() {
-  try {
-    const wrap = document.getElementById('plot-area');
-    const cv   = document.getElementById('webgl-canvas');
-
-    // Tester le support WebGL avant Three.js
-    const testCtx = cv.getContext('webgl') || cv.getContext('experimental-webgl');
-    if (!testCtx) {
-      throw new Error(
-        'WebGL non supporté par ce navigateur ou matériel.\n' +
-        'Solutions : activez l\'accélération GPU dans les paramètres,\n' +
-        'ou essayez Chrome / Firefox à jour.'
-      );
-    }
-    const glVersion = testCtx.getParameter(testCtx.VERSION);
-
-    renderer = new THREE.WebGLRenderer({canvas: cv, antialias: true});
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
-    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
-    renderer.setClearColor(0x0a0c0f, 1);
-
-    document.getElementById('st-renderer').textContent =
-      'WebGL ' + glVersion.replace('WebGL ', '');
-
-    scene  = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.1, 1000);
-    resetCam();
-
-    buildStaticScene();
-    startRenderLoop();
-
-    // Redimensionnement
-    new ResizeObserver(() => {
-      const w = wrap.clientWidth, h = wrap.clientHeight;
-      renderer.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    }).observe(wrap);
-
-    // Interactions souris
-    cv.addEventListener('mousedown', e => {
-      isDragging = true;
-      prevMouse  = {x: e.clientX, y: e.clientY};
+function populateSelects() {
+  const def = ['log_recence','log_frequence','log_tonnage'];
+  ['axeX','axeY','axeZ'].forEach((id,i) => {
+    const sel = document.getElementById(id);
+    RFM_FEATURES.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.id; o.textContent = f.label;
+      if(f.id === def[i]) o.selected = true;
+      sel.appendChild(o);
     });
-    cv.addEventListener('mouseup',    () => isDragging = false);
-    cv.addEventListener('mouseleave', () => { isDragging = false; hideTooltip(); });
-    cv.addEventListener('mousemove',  onMouseMove);
-    cv.addEventListener('wheel', e => {
-      spherical.radius = Math.max(3, Math.min(50, spherical.radius + e.deltaY * 0.02));
-      updateCameraPos();
-    }, {passive: true});
+    sel.addEventListener('change', scheduleRender);
+  });
+}
 
-    setStatus('WebGL prêt', 'ok');
+// ════════════════════════════════════════════════
+// INIT WEBGL — contexte SOFTWARE (SwiftShader/CPU)
+// ════════════════════════════════════════════════
+function initWebGL() {
+  const canvas = document.getElementById('glcanvas');
+
+  // Essayer successivement tous les contextes disponibles
+  // failIfMajorPerformanceCaveat:false = accepte SwiftShader CPU
+  const ctxOpts = { antialias:true, alpha:false,
+                    failIfMajorPerformanceCaveat:false,
+                    powerPreference:'default' };
+
+  gl = canvas.getContext('webgl2', ctxOpts)
+    || canvas.getContext('webgl', ctxOpts)
+    || canvas.getContext('experimental-webgl', ctxOpts);
+
+  if (!gl) {
+    setStatus('WebGL totalement bloqué par Tableau — utilisez GitHub Pages', 'error');
+    document.getElementById('overlay-text').textContent = '⚠ WebGL bloqué';
+    return;
+  }
+
+  setStatus(`WebGL OK (${gl instanceof WebGL2RenderingContext ? 'WebGL2' : 'WebGL1'})`, 'ok');
+
+  // Shaders
+  const vsrc = `
+    attribute vec3 aPos;
+    attribute vec3 aColor;
+    uniform mat4 uMVP;
+    uniform float uPointSize;
+    varying vec3 vColor;
+    void main() {
+      gl_Position  = uMVP * vec4(aPos, 1.0);
+      gl_PointSize = uPointSize;
+      vColor = aColor;
+    }`;
+
+  const fsrc = `
+    precision mediump float;
+    varying vec3 vColor;
+    uniform float uAlpha;
+    void main() {
+      // Cercle parfait
+      vec2 c = gl_PointCoord - 0.5;
+      if(dot(c,c) > 0.25) discard;
+      gl_FragColor = vec4(vColor, uAlpha);
+    }`;
+
+  prog = createProgram(vsrc, fsrc);
+  if (!prog) return;
+
+  aPos       = gl.getAttribLocation(prog,  'aPos');
+  aColor     = gl.getAttribLocation(prog,  'aColor');
+  uMVP       = gl.getUniformLocation(prog, 'uMVP');
+  uPointSize = gl.getUniformLocation(prog, 'uPointSize');
+  uAlpha     = gl.getUniformLocation(prog, 'uAlpha');
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0.039, 0.047, 0.059, 1.0);  // #0a0c0f
+
+  // Resize
+  new ResizeObserver(resizeCanvas).observe(canvas);
+  resizeCanvas();
+
+  // Événements souris
+  canvas.addEventListener('mousedown', e => { cam.dragging=true; cam.lx=e.clientX; cam.ly=e.clientY; });
+  canvas.addEventListener('mouseup',   () => cam.dragging=false);
+  canvas.addEventListener('mouseleave',() => cam.dragging=false);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('wheel',     e => { cam.r = Math.max(4, Math.min(40, cam.r + e.deltaY*0.02)); scheduleRender(); }, {passive:true});
+
+  scheduleRender();
+}
+
+function resizeCanvas() {
+  const c = document.getElementById('glcanvas');
+  const p = document.getElementById('plot-area');
+  c.width  = p.clientWidth;
+  c.height = p.clientHeight;
+  if(gl) gl.viewport(0, 0, c.width, c.height);
+  scheduleRender();
+}
+
+// ════════════════════════════════════════════════
+// SHADER HELPERS
+// ════════════════════════════════════════════════
+function createShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error('Shader error:', gl.getShaderInfoLog(s));
+    return null;
+  }
+  return s;
+}
+
+function createProgram(vsrc, fsrc) {
+  const vs = createShader(gl.VERTEX_SHADER,   vsrc);
+  const fs = createShader(gl.FRAGMENT_SHADER, fsrc);
+  if (!vs || !fs) return null;
+  const p = gl.createProgram();
+  gl.attachShader(p, vs); gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(p));
+    return null;
+  }
+  return p;
+}
+
+// ════════════════════════════════════════════════
+// CHARGEMENT DONNÉES
+// ════════════════════════════════════════════════
+async function loadData() {
+  setStatus('Chargement rfm_data.json…', 'ok');
+  try {
+    const res  = await fetch('rfm_data.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    S.rawData  = (await res.json()).filter(r => r.cluster_id >= 0);
+    const n    = S.rawData.length;
+    document.getElementById('m-points').textContent     = n.toLocaleString('fr-FR');
+    document.getElementById('badge-source').textContent = `${n.toLocaleString('fr-FR')} PDV réels`;
+    setStatus(`${n.toLocaleString('fr-FR')} PDV chargés`, 'ok');
+    document.getElementById('overlay-text').textContent = 'Cliquez "Lancer le clustering"';
+    renderLegendFromReal();
+  } catch(e) {
+    setStatus('Erreur chargement : ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════
+// PIPELINE K-MEANS
+// ════════════════════════════════════════════════
+async function runPipeline() {
+  if (!S.rawData.length || !gl) return;
+  const btn = document.getElementById('btn-run');
+  btn.classList.add('loading');
+  try {
+    const t0     = performance.now();
+    const doNorm = document.getElementById('toggle-norm').checked;
+    const maxIter= parseInt(document.getElementById('iter-slider').value);
+    const nInit  = parseInt(document.getElementById('ninit-slider').value);
+
+    setStatus('Extraction features…', 'ok'); await tick();
+
+    const featIds = RFM_FEATURES.map(f => f.id);
+    S.points = S.rawData.map(r => featIds.map(id => parseFloat(r[id])||0));
+
+    S.normalized = S.points;
+    if (doNorm) {
+      S.normalized = KMeansEngine.zScoreNormalize(S.points).normalized;
+    }
+
+    setStatus('K-Means k=4…', 'ok'); await tick();
+    S.lastResult = KMeansEngine.kMeans(S.normalized, 4, { maxIter, nInit });
+    S.centroids  = S.lastResult.centroids;
+
+    const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+    setStatus('Calcul silhouette…', 'ok'); await tick();
+    const sil = KMeansEngine.silhouetteScore(S.normalized, S.lastResult.labels, 600);
+
+    const useReal = document.getElementById('toggle-real-seg').checked;
+    S.labels = useReal
+      ? S.rawData.map(r => parseInt(r.cluster_id))
+      : S.lastResult.labels;
+
+    buildVBO();
+    scheduleRender();
+    renderLegend(S.labels);
+
+    if (!S.elbowDone) { S.elbowDone=true; computeElbow(S.normalized, 4); }
+
+    document.getElementById('m-silhouette').textContent = sil.toFixed(3);
+    document.getElementById('m-inertia').textContent    = S.lastResult.inertia>999
+      ? (S.lastResult.inertia/1000).toFixed(1)+'k'
+      : S.lastResult.inertia.toFixed(1);
+    document.getElementById('st-iter').textContent = `${S.lastResult.iterations} iter.`;
+    document.getElementById('st-time').textContent = `${elapsed}s`;
+    setStatus(`Terminé — silhouette ${sil.toFixed(3)}`, 'ok');
+    document.getElementById('plot-overlay').classList.add('hidden');
 
   } catch(e) {
-    showError(
-      'Erreur WebGL',
-      e.message,
-      e.stack ? e.stack.split('\n').slice(0, 4).join('\n') : ''
-    );
-  }
+    setStatus('Erreur : '+e.message, 'error'); console.error(e);
+  } finally { btn.classList.remove('loading'); }
 }
 
-/* ═══════════════════════════════════════════════
-   SCÈNE STATIQUE (grille + axes)
-═══════════════════════════════════════════════ */
-function buildStaticScene() {
-  // Grille
-  const gMat  = new THREE.LineBasicMaterial({color:0x1a2030, transparent:true, opacity:0.7});
-  const gGeo  = new THREE.BufferGeometry();
-  const gVerts = [];
-  [-4,-2,0,2,4].forEach(v => {
-    gVerts.push(v,-5,-5,  v,-5, 5);
-    gVerts.push(-5,-5,v,   5,-5, v);
-  });
-  gGeo.setAttribute('position', new THREE.Float32BufferAttribute(gVerts, 3));
-  scene.add(new THREE.LineSegments(gGeo, gMat));
-
-  // Axes colorés
-  const aMat  = new THREE.LineBasicMaterial({vertexColors:true, transparent:true, opacity:0.5});
-  const aGeo  = new THREE.BufferGeometry();
-  const aPos  = [-5,0,0,  5,0,0,  0,-5,0,  0,5,0,  0,0,-5,  0,0,5];
-  const aCol  = [0,0.83,1, 0,0.83,1,  1,0.72,0.19, 1,0.72,0.19,  0.22,0.85,0.54, 0.22,0.85,0.54];
-  aGeo.setAttribute('position', new THREE.Float32BufferAttribute(aPos, 3));
-  aGeo.setAttribute('color',    new THREE.Float32BufferAttribute(aCol, 3));
-  scene.add(new THREE.LineSegments(aGeo, aMat));
-}
-
-/* ═══════════════════════════════════════════════
-   BOUCLE DE RENDU
-═══════════════════════════════════════════════ */
-function startRenderLoop() {
-  if (animId) cancelAnimationFrame(animId);
-  (function loop() {
-    animId = requestAnimationFrame(loop);
-    renderer.render(scene, camera);
-  })();
-}
-
-/* ═══════════════════════════════════════════════
-   CAMÉRA
-═══════════════════════════════════════════════ */
-function updateCameraPos() {
-  const {theta, phi, radius} = spherical;
-  camera.position.set(
-    radius * Math.sin(phi) * Math.sin(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.cos(theta)
-  );
-  camera.lookAt(0, 0, 0);
-}
-
-function resetCam() {
-  spherical.theta  = 0.6;
-  spherical.phi    = 1.1;
-  spherical.radius = 18;
-  updateCameraPos();
-}
-
-function zoomCam(d) {
-  spherical.radius = Math.max(3, Math.min(50, spherical.radius - d * 2));
-  updateCameraPos();
-}
-
-/* ═══════════════════════════════════════════════
-   TOOLTIP + RAYCASTING
-═══════════════════════════════════════════════ */
-function onMouseMove(e) {
-  const cv   = document.getElementById('webgl-canvas');
-  const wrap = document.getElementById('plot-area');
-
-  // Rotation orbitale
-  if (isDragging) {
-    const dx = (e.clientX - prevMouse.x) * 0.008;
-    const dy = (e.clientY - prevMouse.y) * 0.008;
-    spherical.theta -= dx;
-    spherical.phi    = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi + dy));
-    updateCameraPos();
-    prevMouse = {x: e.clientX, y: e.clientY};
-  }
-
-  // Tooltip par raycasting
-  if (!D_pos.X) return;
-  const rect = cv.getBoundingClientRect();
-  const mx   = ((e.clientX - rect.left)  / rect.width)  * 2 - 1;
-  const my   = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
-
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera({x:mx, y:my}, camera);
-  raycaster.params.Points = {threshold: 0.3};
-
-  let best = null, bestDist = Infinity;
-  for (const mesh of pointsMeshes) {
-    const hits = raycaster.intersectObject(mesh);
-    if (hits.length && hits[0].distanceToRay < bestDist) {
-      bestDist = hits[0].distanceToRay;
-      best     = {mesh, hit: hits[0]};
-    }
-  }
-
-  if (!best) { hideTooltip(); return; }
-
-  const idx      = best.hit.index;
-  const si       = best.mesh.userData.segId;
-  const seg      = SEGS[si];
-  const globalIdx = best.mesh.userData.indices[idx];
+// ════════════════════════════════════════════════
+// CONSTRUIRE LE VBO (Vertex Buffer Object)
+// ════════════════════════════════════════════════
+function buildVBO() {
+  if (!S.lastResult) return;
 
   const axX = document.getElementById('axeX').value;
   const axY = document.getElementById('axeY').value;
   const axZ = document.getElementById('axeZ').value;
-  const diX = FEATS.findIndex(f => f.id === axX);
-  const diY = FEATS.findIndex(f => f.id === axY);
-  const diZ = FEATS.findIndex(f => f.id === axZ);
-  const lbl = id => FEATS.find(f => f.id === id)?.label || id;
+  const useReal = document.getElementById('toggle-real-seg').checked;
+  const labels  = useReal
+    ? S.rawData.map(r => parseInt(r.cluster_id))
+    : S.lastResult.labels;
 
-  const tt = document.getElementById('tooltip');
-  tt.innerHTML =
-    `<span style="color:${seg.hex}">■ ${seg.label}</span><br>` +
-    `PDV : ${D.pdvKeys[globalIdx]}<br>` +
-    `X ${lbl(axX)} : ${D.features[globalIdx*NF+diX].toFixed(3)}<br>` +
-    `Y ${lbl(axY)} : ${D.features[globalIdx*NF+diY].toFixed(3)}<br>` +
-    `Z ${lbl(axZ)} : ${D.features[globalIdx*NF+diZ].toFixed(3)}`;
+  // Extraire les 3 colonnes
+  const rawX = S.rawData.map(r => parseFloat(r[axX])||0);
+  const rawY = S.rawData.map(r => parseFloat(r[axY])||0);
+  const rawZ = S.rawData.map(r => parseFloat(r[axZ])||0);
 
-  const px = e.clientX - wrap.getBoundingClientRect().left;
-  const py = e.clientY - wrap.getBoundingClientRect().top;
-  tt.style.left = (px + 210 > wrap.clientWidth  ? px - 218 : px + 12) + 'px';
-  tt.style.top  = (py + 120 > wrap.clientHeight ? py - 125 : py - 10) + 'px';
-  tt.classList.add('visible');
+  // Normaliser dans [-5, 5]
+  const nx = normArr(rawX);
+  const ny = normArr(rawY);
+  const nz = normArr(rawZ);
+
+  // Stocker pour tooltip
+  S._nx = nx; S._ny = ny; S._nz = nz;
+  S._labels = labels;
+
+  // Interleaved: x y z r g b  (6 floats / point)
+  const N    = S.rawData.length;
+  const data = new Float32Array(N * 6);
+
+  for (let i = 0; i < N; i++) {
+    const seg = SEGMENTS[labels[i]];
+    if (!seg) continue;
+    data[i*6+0] = nx[i];
+    data[i*6+1] = ny[i];
+    data[i*6+2] = nz[i];
+    data[i*6+3] = seg.rgb[0];
+    data[i*6+4] = seg.rgb[1];
+    data[i*6+5] = seg.rgb[2];
+  }
+
+  if (vbo) gl.deleteBuffer(vbo.buf);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  vbo = { buf, count: N, labels, axX, axY, axZ };
+
+  // Centroïdes
+  buildCentroidVBO(axX, axY, axZ);
+
+  // Labels axes
+  const lbl = id => RFM_FEATURES.find(f=>f.id===id)?.label || id;
+  document.getElementById('lx').textContent = `X : ${lbl(axX)}`;
+  document.getElementById('ly').textContent = `Y : ${lbl(axY)}`;
+  document.getElementById('lz').textContent = `Z : ${lbl(axZ)}`;
 }
 
-function hideTooltip() {
-  document.getElementById('tooltip').classList.remove('visible');
-}
+function buildCentroidVBO(axX, axY, axZ) {
+  if (!S.centroids.length) return;
+  const featIds = RFM_FEATURES.map(f => f.id);
+  const diX = featIds.indexOf(axX), diY = featIds.indexOf(axY), diZ = featIds.indexOf(axZ);
 
-/* ═══════════════════════════════════════════════
-   SELECTS AXES
-═══════════════════════════════════════════════ */
-function buildSelects() {
-  const def = ['log_recence', 'log_frequence', 'log_tonnage'];
-  ['axeX','axeY','axeZ'].forEach((sid, i) => {
-    const sel = document.getElementById(sid);
-    FEATS.forEach(f => {
-      const o = document.createElement('option');
-      o.value = f.id; o.textContent = f.label;
-      if (f.id === def[i]) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.addEventListener('change', () => {
-      computePos();
-      rebuildPoints();
-      updateAxisLabels();
-    });
+  const rawX = S.rawData.map(r => parseFloat(r[axX])||0);
+  const rawY = S.rawData.map(r => parseFloat(r[axY])||0);
+  const rawZ = S.rawData.map(r => parseFloat(r[axZ])||0);
+  const [mnX,mxX] = [Math.min(...rawX), Math.max(...rawX)];
+  const [mnY,mxY] = [Math.min(...rawY), Math.max(...rawY)];
+  const [mnZ,mxZ] = [Math.min(...rawZ), Math.max(...rawZ)];
+  const scX = v => ((v-mnX)/(mxX-mnX||1))*10-5;
+  const scY = v => ((v-mnY)/(mxY-mnY||1))*10-5;
+  const scZ = v => ((v-mnZ)/(mxZ-mnZ||1))*10-5;
+
+  const K    = S.centroids.length;
+  const data = new Float32Array(K * 6);
+  S.centroids.forEach((c, i) => {
+    const seg = SEGMENTS[i];
+    data[i*6+0] = scX(c[diX]);
+    data[i*6+1] = scY(c[diY]);
+    data[i*6+2] = scZ(c[diZ]);
+    data[i*6+3] = seg ? seg.rgb[0] : 1;
+    data[i*6+4] = seg ? seg.rgb[1] : 1;
+    data[i*6+5] = seg ? seg.rgb[2] : 1;
   });
+
+  if (vboCentroid) gl.deleteBuffer(vboCentroid.buf);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  vboCentroid = { buf, count: K };
 }
 
-/* ═══════════════════════════════════════════════
-   CHARGEMENT BINAIRE
-═══════════════════════════════════════════════ */
-async function loadBinary() {
-  setStatus('Chargement rfm_data.bin…', 'ok');
-  try {
-    const res = await fetch('rfm_data.bin');
-    if (!res.ok) throw new Error(`HTTP ${res.status} — fichier rfm_data.bin introuvable.`);
-    parseBin(await res.arrayBuffer());
-  } catch(e) {
-    showError(
-      'Erreur de chargement',
-      e.message,
-      e.stack ? e.stack.split('\n').slice(0, 4).join('\n') : ''
-    );
-    document.getElementById('overlay-text').textContent = '⚠ ' + e.message;
-  }
+// ════════════════════════════════════════════════
+// RENDU WEBGL
+// ════════════════════════════════════════════════
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(render);
 }
 
-function parseBin(buf) {
-  try {
-    const v   = new DataView(buf);
-    let off   = 0;
-    const N   = v.getUint32(off, true); off += 4;
-    const nf  = v.getUint8(off);        off += 1;
+function render() {
+  renderScheduled = false;
+  if (!gl || !prog) return;
 
-    D.N          = N;
-    D.pdvKeys    = new Uint32Array(N);
-    D.clusterIds = new Uint8Array(N);
-    D.features   = new Float32Array(N * nf);
+  const c = document.getElementById('glcanvas');
+  gl.viewport(0, 0, c.width, c.height);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    for (let i = 0; i < N; i++) {
-      D.pdvKeys[i]    = v.getUint32(off, true); off += 4;
-      D.clusterIds[i] = v.getUint8(off);        off += 1;
-      for (let f = 0; f < nf; f++) {
-        D.features[i * nf + f] = v.getFloat32(off, true); off += 4;
-      }
-    }
+  if (!vbo) return;
 
-    D.labels = D.clusterIds;
-    document.getElementById('m-points').textContent     = N.toLocaleString('fr-FR');
-    document.getElementById('badge-source').textContent = `${N.toLocaleString('fr-FR')} PDV réels`;
-    document.getElementById('overlay-text').textContent = 'Cliquez "Lancer le clustering"';
-    setStatus(`${N.toLocaleString('fr-FR')} PDV chargés`, 'ok');
-
-    computePos();
-    rebuildPoints();
-    updateAxisLabels();
-    renderLegend();
-    document.getElementById('plot-overlay').classList.add('hidden');
-
-  } catch(e) {
-    showError(
-      'Erreur parsing binaire',
-      e.message,
-      e.stack ? e.stack.split('\n').slice(0, 4).join('\n') : ''
-    );
-  }
-}
-
-/* ═══════════════════════════════════════════════
-   POSITIONS 3D NORMALISÉES [-5, 5]
-═══════════════════════════════════════════════ */
-function computePos() {
-  if (!D.features) return;
-  const diX = FEATS.findIndex(f => f.id === document.getElementById('axeX').value);
-  const diY = FEATS.findIndex(f => f.id === document.getElementById('axeY').value);
-  const diZ = FEATS.findIndex(f => f.id === document.getElementById('axeZ').value);
-  D_pos.X = normCol(diX);
-  D_pos.Y = normCol(diY);
-  D_pos.Z = normCol(diZ);
-}
-
-function normCol(di) {
-  const N = D.N; let mn = Infinity, mx = -Infinity;
-  for (let i = 0; i < N; i++) { const v = D.features[i*NF+di]; if(v<mn)mn=v; if(v>mx)mx=v; }
-  const r = mx - mn || 1;
-  const out = new Float32Array(N);
-  for (let i = 0; i < N; i++) out[i] = ((D.features[i*NF+di] - mn) / r) * 10 - 5;
-  return out;
-}
-
-function updateAxisLabels() {
-  const diX = FEATS.findIndex(f => f.id === document.getElementById('axeX').value);
-  const diY = FEATS.findIndex(f => f.id === document.getElementById('axeY').value);
-  const diZ = FEATS.findIndex(f => f.id === document.getElementById('axeZ').value);
-  document.getElementById('lx').textContent = 'X : ' + FEATS[diX].label;
-  document.getElementById('ly').textContent = 'Y : ' + FEATS[diY].label;
-  document.getElementById('lz').textContent = 'Z : ' + FEATS[diZ].label;
-}
-
-/* ═══════════════════════════════════════════════
-   CONSTRUCTION DES POINTS WEBGL (THREE.Points)
-═══════════════════════════════════════════════ */
-function rebuildPoints() {
-  if (!D_pos.X || !D.labels) return;
-  try {
-    // Nettoyer l'ancienne géométrie
-    pointsMeshes.forEach(m => {
-      scene.remove(m);
-      m.geometry.dispose();
-      m.material.dispose();
-    });
-    pointsMeshes = [];
-
-    const alpha = parseFloat(document.getElementById('alpha').value) / 100;
-    const ptSz  = parseFloat(document.getElementById('point-size').value);
-
-    // Grouper les indices par cluster
-    const byCluster = [[], [], [], []];
-    for (let i = 0; i < D.N; i++) byCluster[D.labels[i] & 3].push(i);
-
-    byCluster.forEach((indices, si) => {
-      if (!indices.length) return;
-      const seg = SEGS[si];
-
-      const geo = new THREE.BufferGeometry();
-      const pos = new Float32Array(indices.length * 3);
-      indices.forEach((gi, k) => {
-        pos[k*3]   = D_pos.X[gi];
-        pos[k*3+1] = D_pos.Y[gi];
-        pos[k*3+2] = D_pos.Z[gi];
-      });
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-
-      const mat = new THREE.PointsMaterial({
-        color:          seg.threeColor,
-        size:           ptSz * 0.08,
-        sizeAttenuation:true,
-        transparent:    true,
-        opacity:        alpha,
-      });
-
-      const mesh      = new THREE.Points(geo, mat);
-      mesh.visible    = !D.hidden.has(si);
-      mesh.userData   = {segId: si, indices};
-      pointsMeshes.push(mesh);
-      scene.add(mesh);
-    });
-
-  } catch(e) {
-    showError(
-      'Erreur rendu points',
-      e.message,
-      e.stack ? e.stack.split('\n').slice(0, 3).join('\n') : ''
-    );
-  }
-}
-
-/* Met à jour taille/opacité sans reconstruire la géométrie */
-function updateMaterial() {
-  const alpha = parseFloat(document.getElementById('alpha').value) / 100;
+  const mvp   = getMVP(c.width / c.height);
   const ptSz  = parseFloat(document.getElementById('point-size').value);
-  pointsMeshes.forEach(m => {
-    if (m.material) {
-      m.material.size    = ptSz * 0.08;
-      m.material.opacity = alpha;
-      m.material.needsUpdate = true;
-    }
-  });
-}
+  const alpha = parseFloat(document.getElementById('alpha').value) / 100;
+  const showC = document.getElementById('toggle-centroids').checked;
+  const useReal = document.getElementById('toggle-real-seg').checked;
+  const labels  = useReal
+    ? S.rawData.map(r => parseInt(r.cluster_id))
+    : S.lastResult?.labels || [];
 
-/* ═══════════════════════════════════════════════
-   CENTROÏDES WebGL (sphères wireframe)
-═══════════════════════════════════════════════ */
-function rebuildCentroids() {
-  centroidMeshes.forEach(m => {
-    scene.remove(m);
-    m.geometry.dispose();
-    m.material.dispose();
-  });
-  centroidMeshes = [];
-  if (!D.centroids) return;
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(uMVP, false, mvp);
+  gl.uniform1f(uAlpha, alpha);
 
-  const show = document.getElementById('toggle-centroids').checked;
-  const diX  = FEATS.findIndex(f => f.id === document.getElementById('axeX').value);
-  const diY  = FEATS.findIndex(f => f.id === document.getElementById('axeY').value);
-  const diZ  = FEATS.findIndex(f => f.id === document.getElementById('axeZ').value);
-  const [mnX,mxX] = getMinMax(diX);
-  const [mnY,mxY] = getMinMax(diY);
-  const [mnZ,mxZ] = getMinMax(diZ);
+  // Dessiner chaque cluster séparément (pour gérer hidden)
+  const stride = 6 * 4; // 6 floats * 4 bytes
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo.buf);
+  gl.enableVertexAttribArray(aPos);
+  gl.enableVertexAttribArray(aColor);
+  gl.vertexAttribPointer(aPos,   3, gl.FLOAT, false, stride, 0);
+  gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, stride, 3*4);
 
-  D.centroids.forEach((c, ci) => {
-    const seg = SEGS[ci];
-    const cx  = ((c[diX]-mnX)/(mxX-mnX||1))*10-5;
-    const cy  = ((c[diY]-mnY)/(mxY-mnY||1))*10-5;
-    const cz  = ((c[diZ]-mnZ)/(mxZ-mnZ||1))*10-5;
-
-    const geo = new THREE.SphereGeometry(0.25, 12, 8);
-    const mat = new THREE.MeshBasicMaterial({color: seg.threeColor, wireframe: true});
-    const m   = new THREE.Mesh(geo, mat);
-    m.position.set(cx, cy, cz);
-    m.visible = show && !D.hidden.has(ci);
-    centroidMeshes.push(m);
-    scene.add(m);
-  });
-}
-
-function updateCentroidVisibility() {
-  const show = document.getElementById('toggle-centroids').checked;
-  centroidMeshes.forEach((m, i) => {
-    m.visible = show && !D.hidden.has(SEGS[i]?.id ?? i);
-  });
-}
-
-/* ═══════════════════════════════════════════════
-   PIPELINE K-MEANS
-═══════════════════════════════════════════════ */
-async function runPipeline() {
-  if (!D.features) { setStatus('Données non chargées', 'warn'); return; }
-
-  // Vérifier que kmeans.js est bien chargé
-  if (typeof KMeansEngine === 'undefined') {
-    showError(
-      'Module manquant',
-      'kmeans.js est introuvable. Assurez-vous que le fichier est dans le même dossier que index.html.',
-      ''
-    );
-    return;
+  // Dessiner tous les points visibles
+  // (on recrée un buffer filtré selon hidden)
+  const N = S.rawData.length;
+  const filtered = [];
+  for (let i = 0; i < N; i++) {
+    const seg = labels[i];
+    if (S.hidden.has(seg)) continue;
+    filtered.push(i);
   }
 
-  const btn = document.getElementById('btn-run');
-  btn.classList.add('loading');
-
-  try {
-    const t0      = performance.now();
-    const doNorm  = document.getElementById('toggle-norm').checked;
-    const maxIter = parseInt(document.getElementById('iter-slider').value);
-    const nInit   = parseInt(document.getElementById('ninit-slider').value);
-    const N       = D.N;
-
-    setStatus('Préparation…', 'ok'); await tick();
-
-    const pts = [];
-    for (let i = 0; i < N; i++) {
-      const row = new Array(NF);
-      for (let f = 0; f < NF; f++) row[f] = D.features[i*NF+f];
-      pts.push(row);
+  if (filtered.length) {
+    const data = new Float32Array(filtered.length * 6);
+    const src  = new Float32Array(N * 6);
+    // Relire le buffer original
+    // (on garde une copie en mémoire)
+    if (!vbo._data) {
+      // Stocker la copie au moment du build
     }
+    filtered.forEach((origIdx, j) => {
+      data[j*6+0] = S._nx[origIdx];
+      data[j*6+1] = S._ny[origIdx];
+      data[j*6+2] = S._nz[origIdx];
+      const seg   = SEGMENTS[labels[origIdx]];
+      data[j*6+3] = seg ? seg.rgb[0] : 1;
+      data[j*6+4] = seg ? seg.rgb[1] : 1;
+      data[j*6+5] = seg ? seg.rgb[2] : 1;
+    });
 
-    let norm = pts;
-    if (doNorm) {
-      setStatus('Normalisation Z-score…', 'ok'); await tick();
-      norm = KMeansEngine.zScoreNormalize(pts).normalized;
-    }
+    const tmpBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tmpBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+    gl.vertexAttribPointer(aPos,   3, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, stride, 3*4);
+    gl.uniform1f(uPointSize, ptSz);
+    gl.drawArrays(gl.POINTS, 0, filtered.length);
+    gl.deleteBuffer(tmpBuf);
+  }
 
-    setStatus('K-Means k=4…', 'ok'); await tick();
-    const res = KMeansEngine.kMeans(norm, 4, {maxIter, nInit});
-    D.kLabels   = new Int32Array(res.labels);
-    D.centroids = res.centroids;
-
-    const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
-
-    setStatus('Silhouette…', 'ok'); await tick();
-    const sil = KMeansEngine.silhouetteScore(norm, res.labels, 600);
-
-    applyLabels();
-    rebuildCentroids();
-
-    if (!D.elbowDone) { D.elbowDone = true; computeElbow(norm); }
-
-    document.getElementById('m-silhouette').textContent = sil.toFixed(3);
-    document.getElementById('m-inertia').textContent    =
-      res.inertia > 999 ? (res.inertia/1000).toFixed(1)+'k' : res.inertia.toFixed(1);
-    document.getElementById('st-iter').textContent = `${res.iterations} iter.`;
-    document.getElementById('st-time').textContent = `${elapsed}s`;
-    setStatus(`Terminé — silhouette ${sil.toFixed(3)}`, 'ok');
-
-  } catch(e) {
-    showError(
-      'Erreur K-Means',
-      e.message,
-      e.stack ? e.stack.split('\n').slice(0, 5).join('\n') : ''
-    );
-  } finally {
-    btn.classList.remove('loading');
+  // Centroïdes (plus grands, blancs)
+  if (showC && vboCentroid) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboCentroid.buf);
+    gl.vertexAttribPointer(aPos,   3, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, stride, 3*4);
+    gl.uniform1f(uPointSize, ptSz * 4);
+    gl.uniform1f(uAlpha, 1.0);
+    gl.drawArrays(gl.POINTS, 0, vboCentroid.count);
   }
 }
 
-function applyLabels() {
-  const useReal = document.getElementById('toggle-real').checked;
-  D.labels = useReal ? D.clusterIds : (D.kLabels || D.clusterIds);
-  rebuildPoints();
-  renderLegend();
+// ════════════════════════════════════════════════
+// MATRICE MVP (Model-View-Projection)
+// ════════════════════════════════════════════════
+function getMVP(aspect) {
+  // Projection perspective
+  const fov  = Math.PI / 4;
+  const near = 0.1, far = 100;
+  const f    = 1 / Math.tan(fov / 2);
+  const proj = [
+    f/aspect, 0, 0, 0,
+    0, f, 0, 0,
+    0, 0, (far+near)/(near-far), -1,
+    0, 0, (2*far*near)/(near-far), 0
+  ];
+
+  // Vue orbitale
+  const { theta, phi, r } = cam;
+  const ex = r * Math.sin(phi) * Math.cos(theta);
+  const ey = r * Math.cos(phi);
+  const ez = r * Math.sin(phi) * Math.sin(theta);
+
+  const view = lookAt([ex,ey,ez], [0,0,0], [0,1,0]);
+  return mat4Mul(proj, view);
 }
 
-/* ═══════════════════════════════════════════════
-   LÉGENDE
-═══════════════════════════════════════════════ */
-function renderLegend() {
-  if (!D.labels) return;
+function lookAt(eye, center, up) {
+  const z = normalize([eye[0]-center[0], eye[1]-center[1], eye[2]-center[2]]);
+  const x = normalize(cross(up, z));
+  const y = cross(z, x);
+  return [
+     x[0],  y[0],  z[0], 0,
+     x[1],  y[1],  z[1], 0,
+     x[2],  y[2],  z[2], 0,
+    -dot(x,eye), -dot(y,eye), -dot(z,eye), 1
+  ];
+}
+
+function normalize(v) { const l=Math.hypot(...v)||1; return v.map(x=>x/l); }
+function cross(a,b)   { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function dot(a,b)     { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+
+function mat4Mul(a, b) {
+  const r = new Array(16).fill(0);
+  for (let i=0;i<4;i++) for(let j=0;j<4;j++)
+    for(let k=0;k<4;k++) r[i*4+j] += a[i*4+k]*b[k*4+j];
+  return r;
+}
+
+// ════════════════════════════════════════════════
+// SOURIS — Rotation + Tooltip
+// ════════════════════════════════════════════════
+function onMouseMove(e) {
+  if (cam.dragging) {
+    const dx = e.clientX - cam.lx;
+    const dy = e.clientY - cam.ly;
+    cam.theta -= dx * 0.008;
+    cam.phi    = Math.max(0.1, Math.min(Math.PI-0.1, cam.phi + dy*0.008));
+    cam.lx = e.clientX; cam.ly = e.clientY;
+    scheduleRender();
+  }
+  showTooltip(e);
+}
+
+function showTooltip(e) {
+  if (!S._nx || !S.rawData.length) return;
+  const canvas = document.getElementById('glcanvas');
+  const rect   = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const W = canvas.width, H = canvas.height;
+
+  // Projeter tous les points et trouver le plus proche
+  const mvp = getMVP(W/H);
+  const useReal = document.getElementById('toggle-real-seg').checked;
+  const labels  = useReal
+    ? S.rawData.map(r => parseInt(r.cluster_id))
+    : S.lastResult?.labels || [];
+
+  let best = -1, bestDist = 20; // seuil pixels
+  const N = S.rawData.length;
+  const step = Math.max(1, Math.floor(N / 5000)); // échantillon pour perf
+
+  for (let i = 0; i < N; i += step) {
+    if (S.hidden.has(labels[i])) continue;
+    const [sx, sy] = project(S._nx[i], S._ny[i], S._nz[i], mvp, W, H);
+    const d = Math.hypot(sx - mx, sy - my);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+
+  const tooltip = document.getElementById('tooltip');
+  if (best < 0) { tooltip.classList.remove('visible'); return; }
+
+  const row = S.rawData[best];
+  const seg = SEGMENTS[labels[best]];
+  const axX = document.getElementById('axeX').value;
+  const axY = document.getElementById('axeY').value;
+  const axZ = document.getElementById('axeZ').value;
+  const lbl = id => RFM_FEATURES.find(f=>f.id===id)?.label || id;
+
+  tooltip.innerHTML = `
+    <span style="color:${seg.hex}">■ ${seg.label}</span><br>
+    PDV: ${row.pdv_key} · ${row.city||'—'}<br>
+    X ${lbl(axX)}: ${(parseFloat(row[axX])||0).toFixed(3)}<br>
+    Y ${lbl(axY)}: ${(parseFloat(row[axY])||0).toFixed(3)}<br>
+    Z ${lbl(axZ)}: ${(parseFloat(row[axZ])||0).toFixed(3)}
+  `;
+
+  let tx = mx + 14, ty = my - 20;
+  if (tx + 200 > W) tx = mx - 214;
+  if (ty + 110 > H) ty = my - 120;
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top  = ty + 'px';
+  tooltip.classList.add('visible');
+}
+
+function project(x, y, z, mvp, W, H) {
+  const w = mvp[3]*x + mvp[7]*y + mvp[11]*z + mvp[15];
+  const cx = (mvp[0]*x + mvp[4]*y + mvp[8]*z  + mvp[12]) / w;
+  const cy = (mvp[1]*x + mvp[5]*y + mvp[9]*z  + mvp[13]) / w;
+  return [(cx+1)/2*W, (1-cy)/2*H];
+}
+
+function resetCamera() { cam.theta=0.8; cam.phi=1.1; cam.r=16; scheduleRender(); }
+function zoom(d)       { cam.r = Math.max(4, Math.min(40, cam.r+d)); scheduleRender(); }
+
+// ════════════════════════════════════════════════
+// UTILITAIRES
+// ════════════════════════════════════════════════
+function normArr(vals) {
+  const mn = Math.min(...vals), mx = Math.max(...vals), range = mx-mn||1;
+  return vals.map(v => ((v-mn)/range)*10-5);
+}
+
+// ════════════════════════════════════════════════
+// LÉGENDE
+// ════════════════════════════════════════════════
+function renderLegendFromReal() {
   const counts = {};
-  for (let i = 0; i < D.N; i++) { const l = D.labels[i]; counts[l] = (counts[l]||0) + 1; }
-  const total = Object.values(counts).reduce((s,v) => s+v, 0);
-  const lg = document.getElementById('legend'); lg.innerHTML = '';
-
-  SEGS.forEach(seg => {
-    const cnt = counts[seg.id] || 0;
+  S.rawData.forEach(r => { const c=parseInt(r.cluster_id); counts[c]=(counts[c]||0)+1; });
+  renderLegendCounts(counts);
+}
+function renderLegend(labels) {
+  const counts = {};
+  labels.forEach(l => { counts[l]=(counts[l]||0)+1; });
+  renderLegendCounts(counts);
+}
+function renderLegendCounts(counts) {
+  const total = Object.values(counts).reduce((s,v)=>s+v, 0);
+  const lg = document.getElementById('legend');
+  lg.innerHTML = '';
+  SEGMENTS.forEach(seg => {
+    const cnt = counts[seg.id]||0;
     const pct = total ? ((cnt/total)*100).toFixed(1) : '0.0';
     const item = document.createElement('div');
     item.className = 'legend-item';
-    item.innerHTML =
-      `<div class="legend-dot" style="background:${seg.hex}"></div>` +
-      `<span class="legend-name">${seg.label}</span>` +
-      `<span class="legend-count">${cnt.toLocaleString('fr-FR')} (${pct}%)</span>`;
+    item.innerHTML = `
+      <div class="legend-dot" style="background:${seg.hex};color:${seg.hex}"></div>
+      <span class="legend-name">${seg.label}</span>
+      <span class="legend-count">${cnt.toLocaleString('fr-FR')} (${pct}%)</span>
+    `;
     item.onclick = () => {
-      const h = D.hidden.has(seg.id);
-      h ? D.hidden.delete(seg.id) : D.hidden.add(seg.id);
-      item.classList.toggle('muted', !h);
-      // Masquer/afficher dans la scène WebGL directement
-      pointsMeshes.forEach(m => { if (m.userData.segId === seg.id) m.visible = h; });
-      centroidMeshes.forEach((m, i) => {
-        if ((SEGS[i]?.id ?? i) === seg.id) m.visible = h && document.getElementById('toggle-centroids').checked;
-      });
+      const hidden = S.hidden.has(seg.id);
+      hidden ? S.hidden.delete(seg.id) : S.hidden.add(seg.id);
+      item.classList.toggle('muted', !hidden);
+      scheduleRender();
     };
     lg.appendChild(item);
   });
 }
 
-/* ═══════════════════════════════════════════════
-   COURBE DU COUDE (Canvas 2D dans sidebar)
-═══════════════════════════════════════════════ */
-async function computeElbow(normalized) {
-  try {
-    const s = normalized.length > 3000
-      ? [...normalized].sort(() => Math.random() - .5).slice(0, 3000)
-      : normalized;
-    const data = KMeansEngine.elbowMethod(s, 2, 7);
-
-    const cv  = document.getElementById('elbow-canvas');
-    const ctx = cv.getContext('2d');
-    const W = cv.width, H = cv.height;
-    const p = {t:8, r:8, b:18, l:36};
-
-    ctx.clearRect(0, 0, W, H);
-    const inerties = data.map(d => d.inertia);
-    const minI  = Math.min(...inerties), maxI = Math.max(...inerties), range = maxI - minI || 1;
-    const xs    = data.map((_, i) => p.l + (i / (data.length-1||1)) * (W - p.l - p.r));
-    const ys    = data.map(d => H - p.b - ((d.inertia - minI) / range) * (H - p.t - p.b));
-
-    ctx.strokeStyle = '#2a3040'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(p.l,p.t); ctx.lineTo(p.l,H-p.b); ctx.lineTo(W-p.r,H-p.b); ctx.stroke();
-
-    ctx.fillStyle = '#3d4a5c'; ctx.font = '8px IBM Plex Mono,monospace'; ctx.textAlign = 'center';
-    data.forEach((d, i) => ctx.fillText(d.k, xs[i], H-4));
-
-    ctx.strokeStyle = '#2a3040'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); xs.forEach((x,i) => i===0 ? ctx.moveTo(x,ys[i]) : ctx.lineTo(x,ys[i])); ctx.stroke();
-
-    data.forEach((d, i) => {
-      ctx.beginPath(); ctx.arc(xs[i], ys[i], d.k===4 ? 4 : 2.5, 0, Math.PI*2);
-      ctx.fillStyle = d.k === 4 ? '#00d4ff' : '#7a8899'; ctx.fill();
-    });
-  } catch(e) {
-    showError('Erreur courbe du coude', e.message, '');
-  }
+// ════════════════════════════════════════════════
+// COURBE DU COUDE
+// ════════════════════════════════════════════════
+async function computeElbow(normalized, currentK) {
+  const sample = normalized.length > 3000
+    ? [...normalized].sort(()=>Math.random()-0.5).slice(0,3000)
+    : normalized;
+  drawElbow(KMeansEngine.elbowMethod(sample, 2, 7), currentK);
 }
-
-/* ═══════════════════════════════════════════════
-   UTILITAIRES
-═══════════════════════════════════════════════ */
-function getMinMax(di) {
-  let mn = Infinity, mx = -Infinity;
-  for (let i = 0; i < D.N; i++) { const v = D.features[i*NF+di]; if(v<mn)mn=v; if(v>mx)mx=v; }
-  return [mn, mx];
-}
-
-function toggleSection(id) { document.getElementById(id).classList.toggle('collapsed'); }
-
-function setStatus(msg, type = 'ok') {
-  document.getElementById('status-msg').textContent = msg;
-  document.getElementById('st-dot').className = `dot ${type}`;
-}
-
-function tick() { return new Promise(r => setTimeout(r, 20)); }
-
-/* ═══════════════════════════════════════════════
-   DÉMARRAGE
-═══════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => {
-  buildSelects();
-  initThree();
-  loadBinary();
-
-  // Capture globale des erreurs JS non gérées → panneau graphe
-  window.addEventListener('error', e => {
-    if (e.error) showError(
-      'Erreur JavaScript',
-      e.message || 'Erreur inconnue',
-      e.filename ? `${e.filename}:${e.lineno}` : ''
-    );
+function drawElbow(data, currentK) {
+  const cv = document.getElementById('elbow-canvas');
+  const ctx = cv.getContext('2d');
+  const W=cv.width, H=cv.height, pad={t:8,r:8,b:18,l:36};
+  ctx.clearRect(0,0,W,H);
+  const inerties = data.map(d=>d.inertia);
+  const minI=Math.min(...inerties), maxI=Math.max(...inerties), range=maxI-minI||1;
+  const xs = data.map((_,i)=>pad.l+(i/(data.length-1||1))*(W-pad.l-pad.r));
+  const ys = data.map(d=>H-pad.b-((d.inertia-minI)/range)*(H-pad.t-pad.b));
+  ctx.strokeStyle='#2a3040'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+  ctx.fillStyle='#3d4a5c'; ctx.font='8px IBM Plex Mono,monospace'; ctx.textAlign='center';
+  data.forEach((d,i)=>ctx.fillText(d.k, xs[i], H-4));
+  ctx.strokeStyle='#2a3040'; ctx.lineWidth=1.5;
+  ctx.beginPath(); xs.forEach((x,i)=>i===0?ctx.moveTo(x,ys[i]):ctx.lineTo(x,ys[i])); ctx.stroke();
+  data.forEach((d,i)=>{
+    ctx.beginPath(); ctx.arc(xs[i],ys[i],d.k===currentK?4:2.5,0,Math.PI*2);
+    ctx.fillStyle=d.k===currentK?'#00d4ff':'#7a8899';
+    if(d.k===currentK){ctx.shadowColor='#00d4ff';ctx.shadowBlur=8;}
+    ctx.fill(); ctx.shadowBlur=0;
   });
-  window.addEventListener('unhandledrejection', e => {
-    showError(
-      'Promesse rejetée',
-      e.reason?.message || String(e.reason),
-      e.reason?.stack ? e.reason.stack.split('\n').slice(0, 4).join('\n') : ''
-    );
-  });
-});
+}
+
+// ════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════
+function toggleSection(id){ document.getElementById(id).classList.toggle('collapsed'); }
+function setStatus(msg,type='ok'){
+  document.getElementById('status-msg').textContent=msg;
+  document.getElementById('st-dot').className=`dot ${type}`;
+}
+function tick(){ return new Promise(r=>setTimeout(r,20)); }
 </script>
 </body>
 </html>
