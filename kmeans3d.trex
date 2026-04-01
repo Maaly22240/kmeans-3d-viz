@@ -4,16 +4,12 @@
     <default-locale>fr_FR</default-locale>
     <name resource-id="name">K-Means 3D Akwa Gaz</name>
     <description resource-id="description">Visualisation 3D des 4 clusters K-Means RFM. Champions, Actifs Moderes Hiver, PDV Dormants, Actifs Faibles Ete.</description>
-    <author name="Akwa Gaz Analytics" email="analytics@akwagaz.com" organization="Akwa Gaz" website="https://akwagaz.com"/>
+    <author name="Akwa Gaz Analytics" email="analytics@akwagaz.com" organization="Akwa Gaz" website="https://maaly22240.github.io"/>
     <min-api-version>1.7</min-api-version>
     <source-location>
-      <url>http://localhost:8765</url>
+      <url>https://maaly22240.github.io/kmeans-3d-viz/index.html</url>
     </source-location>
-    <icon></icon> 
-    <permissions>
-      <permission>full data</permission>
-    </permissions>
-  </dashboard-extension>
+    <icon></icon> </dashboard-extension>
   <resources>
     <resource id="name">
       <text locale="fr_FR">K-Means 3D Akwa Gaz</text>
